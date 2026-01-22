@@ -104,7 +104,7 @@ for field in FIELDS
     infile = joinpath(simu_path, field * ".fits")
     @assert isfile(infile) "Missing file: $infile"
 
-    data = read_fits_array(infile)
+    data = read_FITS(infile)
 
     # Sanity check (expected 256×256×256)
     @assert size(data) == (256, 256, 256) "Unexpected cube size for $field: got $(size(data))"

@@ -273,7 +273,7 @@ SIMU_DIR = joinpath(SIMU_ROOT, SIMU_NAME)
 
 PMAX_FILE = joinpath(SIMU_DIR, LOS, "Synchrotron", "WithFaraday", "Pmax.fits")
 @assert isfile(PMAX_FILE) "Missing: $PMAX_FILE"
-Pmax = read_fits_array(PMAX_FILE)
+Pmax = read_FITS(PMAX_FILE)
 
 q10 = quantile(vec(Pmax), 0.1)
 q90 = quantile(vec(Pmax), 0.9)
@@ -290,7 +290,7 @@ p10 = Pmax[i10, j10]
 bname, profile_fun = los_config(LOS)
 BLOS_FILE = joinpath(SIMU_DIR, bname * ".fits")
 @assert isfile(BLOS_FILE) "Missing: $BLOS_FILE"
-Bcube = read_fits_array(BLOS_FILE)
+Bcube = read_FITS(BLOS_FILE)
 
 prof1  = B_SCALE .* profile_fun(i1,  j1,  Bcube)
 prof10 = B_SCALE .* profile_fun(i10, j10, Bcube)
@@ -301,7 +301,7 @@ prof10_use = SMOOTH_B ? smooth_moving_average(prof10, SMOOTH_WIN) : prof10
 # ne cube
 NE_FILE = joinpath(SIMU_DIR, LOS, "Synchrotron", "ne.fits")
 @assert isfile(NE_FILE) "Missing: $NE_FILE"
-ne_cube = read_fits_array(NE_FILE)
+ne_cube = read_FITS(NE_FILE)
 @assert size(ne_cube) == (NPIX, NPIX, NPIX) "Unexpected ne size: $(size(ne_cube))"
 ne1  = profile_fun(i1,  j1,  ne_cube)
 ne10 = profile_fun(i10, j10, ne_cube)
@@ -311,7 +311,7 @@ dist = collect(range(0.0, LBOX_PC; length=NPIX))
 
 FDF_FILE = joinpath(SIMU_DIR, LOS, "Synchrotron", "WithFaraday", "FDF.fits")
 @assert isfile(FDF_FILE) "Missing: $FDF_FILE"
-FDFcube = read_fits_array(FDF_FILE)
+FDFcube = read_FITS(FDF_FILE)
 
 FDF1  = extract_fdf_spectrum(FDFcube, i1,  j1,  NPHI)
 FDF10 = extract_fdf_spectrum(FDFcube, i10, j10, NPHI)

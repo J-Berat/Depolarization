@@ -44,14 +44,14 @@ SIMU_DIR = joinpath(SIMU_ROOT, SIMU_NAME)
 # load Pmax (optional but handy to show where the pixel is)
 PMAX_FILE = joinpath(SIMU_DIR, LOS, "Synchrotron", "WithFaraday", "Pmax.fits")
 @assert isfile(PMAX_FILE) "Missing: $PMAX_FILE"
-Pmax = read_fits_array(PMAX_FILE)
+Pmax = read_FITS(PMAX_FILE)
 @assert size(Pmax) == (NPIX, NPIX) "Unexpected Pmax size: $(size(Pmax))"
 
 # load B cube
 bname, profile_fun = los_config(LOS)
 BLOS_FILE = joinpath(SIMU_DIR, bname * ".fits")
 @assert isfile(BLOS_FILE) "Missing: $BLOS_FILE"
-Bcube = read_fits_array(BLOS_FILE)
+Bcube = read_FITS(BLOS_FILE)
 @assert size(Bcube) == (NPIX, NPIX, NPIX) "Unexpected $bname size: $(size(Bcube))"
 
 # distance axis

@@ -158,13 +158,13 @@ for (seg,(kmin,kmax)) in enumerate(intervals)
             continue
         end
 
-        A = read_fits_array(inpath)
+        A = read_FITS(inpath)
         @assert ndims(A) == 3 "Expected 3D cube for $var, got size=$(size(A))"
 
         Acut = cut_cube(A, ax, kmin, kmax)
 
         outpath = joinpath(segdir, fname)
-        write_fits_array(outpath, Acut; overwrite=OVERWRITE)
+        write_FITS(outpath, Acut; overwrite=OVERWRITE)
     end
 end
 
