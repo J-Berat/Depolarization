@@ -1,10 +1,11 @@
 # Depolarization
 
-Analysis scripts for studying Faraday depolarization in synthetic synchrotron maps. The Julia notebooks in `code/` focus on polarization gradients, RM synthesis products, polarization degree, and related diagnostics derived from FITS cubes produced by RAMSES or similar MHD simulations.
+Analysis scripts for studying Faraday depolarization in synthetic synchrotron maps. The Julia notebooks in `src/code/` focus on polarization gradients, RM synthesis products, polarization degree, and related diagnostics derived from FITS cubes produced by RAMSES or similar MHD simulations.
 
 ## Repository layout
 
-- `code/`: Julia scripts for the analysis and figure generation.
+- `src/code/`: Julia scripts for the analysis and figure generation.
+- `src/scripts/`: Symlink to `src/code/` so "code" and "scripts" refer to the same content.
 - `File_IO/`: Supporting data or auxiliary I/O (if present in your local copy).
 
 ## Requirements
@@ -30,9 +31,9 @@ Pkg.add(["FITSIO", "CairoMakie", "FFTW", "LaTeXStrings", "Statistics"])
 Each script is a standalone entry point. Update the hard-coded paths at the top of a script to point to your local FITS data, then run it with Julia:
 
 ```bash
-julia code/GradP.jl
-julia code/PolarizationDegree.jl
-julia code/InstrumentalEffect.jl
+julia src/code/GradP.jl
+julia src/code/PolarizationDegree.jl
+julia src/code/InstrumentalEffect.jl
 ```
 
 Common inputs expected by the scripts include:
