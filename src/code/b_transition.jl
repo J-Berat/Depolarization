@@ -7,7 +7,7 @@ using LaTeXStrings
 using Logging
 
 include(joinpath(@__DIR__, "../io/fits_io.jl"))
-include(joinpath(@__DIR__, "../analysis/los_utils.jl"))
+include(joinpath(@__DIR__, "../los_utils.jl"))
 
 # ------------------------------------------------------------
 # USER CHOICES

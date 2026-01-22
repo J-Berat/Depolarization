@@ -5,7 +5,7 @@ Analysis scripts for studying Faraday depolarization in synthetic synchrotron ma
 ## Repository layout
 
 - `src/code/`: Julia scripts for the analysis and figure generation.
-- `src/scripts/`: Symlink to `src/code/` so "code" and "scripts" refer to the same content.
+- `src/scripts/`: Additional Julia scripts that live alongside the analysis code.
 - `File_IO/`: Supporting data or auxiliary I/O (if present in your local copy).
 
 ## Requirements
@@ -31,9 +31,9 @@ Pkg.add(["FITSIO", "CairoMakie", "FFTW", "LaTeXStrings", "Statistics"])
 Each script is a standalone entry point. Update the hard-coded paths at the top of a script to point to your local FITS data, then run it with Julia:
 
 ```bash
-julia src/code/GradP.jl
-julia src/code/PolarizationDegree.jl
-julia src/code/InstrumentalEffect.jl
+julia src/code/grad_p.jl
+julia src/code/polarization_degree.jl
+julia src/code/instrumental_effect.jl
 ```
 
 Common inputs expected by the scripts include:
