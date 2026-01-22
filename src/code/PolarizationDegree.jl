@@ -2,35 +2,32 @@ using FITSIO
 using CairoMakie
 using Statistics
 using LaTeXStrings
+include(joinpath(@__DIR__, "../constants.jl"))
 include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
 # USER CHOICES
 # ------------------------------------------------------------
-const SIMU_ROOT = "/Users/jb270005/Desktop/simu_RAMSES"
-const SIMU_NAME = "d1cf05bx10rms18000nograv1024"
-const LOS       = "y"                 # "x", "y", or "z"
+const SIMU_ROOT = DepolarizationConstants.PolarizationDegree.SIMU_ROOT
+const SIMU_NAME = DepolarizationConstants.PolarizationDegree.SIMU_NAME
+const LOS = DepolarizationConstants.PolarizationDegree.LOS
 
-const NPIX    = 256
-const LBOX_PC = 50.0
+const NPIX = DepolarizationConstants.PolarizationDegree.NPIX
+const LBOX_PC = DepolarizationConstants.PolarizationDegree.LBOX_PC
 
-const CMAP = :viridis
-const VMIN = 0.0
-const VMAX = 1.0
+const CMAP = DepolarizationConstants.PolarizationDegree.CMAP
+const VMIN = DepolarizationConstants.PolarizationDegree.VMIN
+const VMAX = DepolarizationConstants.PolarizationDegree.VMAX
 
 # ------------------------------------------------------------
 # PATHS
 # ------------------------------------------------------------
-const SYNCHRO_DIR = joinpath(
-    SIMU_ROOT, SIMU_NAME, LOS, "Synchrotron", "WithFaraday"
-)
-
-const I_FILE = joinpath(SYNCHRO_DIR, "I.fits")
-const Q_FILE = joinpath(SYNCHRO_DIR, "Q.fits")
-const U_FILE = joinpath(SYNCHRO_DIR, "U.fits")
-
-const OUT_DIR = joinpath(SYNCHRO_DIR, "Plots")
-const OUT_PDF = joinpath(OUT_DIR, "p_degree_$(LOS).pdf")
+const SYNCHRO_DIR = DepolarizationConstants.PolarizationDegree.SYNCHRO_DIR
+const I_FILE = DepolarizationConstants.PolarizationDegree.I_FILE
+const Q_FILE = DepolarizationConstants.PolarizationDegree.Q_FILE
+const U_FILE = DepolarizationConstants.PolarizationDegree.U_FILE
+const OUT_DIR = DepolarizationConstants.PolarizationDegree.OUT_DIR
+const OUT_PDF = DepolarizationConstants.PolarizationDegree.OUT_PDF
 
 mkpath(OUT_DIR)
 

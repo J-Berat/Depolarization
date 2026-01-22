@@ -1,6 +1,7 @@
 using FITSIO
 using CairoMakie
 using LaTeXStrings
+include(joinpath(@__DIR__, "../constants.jl"))
 include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
@@ -19,36 +20,36 @@ pmax_files = joinpath.(paths, "Pmax.fits")
 # ------------------------------------------------------------
 # true  -> same colorrange (and thus same colorbar limits) as the full cube for all panels
 # false -> individual autoscaled colorrange per panel
-const USE_FULLCUBE_COLORRANGE = false
+const USE_FULLCUBE_COLORRANGE = DepolarizationConstants.PmaxCut.USE_FULLCUBE_COLORRANGE
 
 # ------------------------------------------------------------
 # MARKER STYLE
 # ------------------------------------------------------------
-const MAP_MARK_COLOR = (:white, 0.6)
-const MAP_MARK_STYLE = :dash
-const MAP_MARK_LW    = 2.5
+const MAP_MARK_COLOR = DepolarizationConstants.PmaxCut.MAP_MARK_COLOR
+const MAP_MARK_STYLE = DepolarizationConstants.PmaxCut.MAP_MARK_STYLE
+const MAP_MARK_LW = DepolarizationConstants.PmaxCut.MAP_MARK_LW
 
-const i1 = 159
-const j1 = 206
+const i1 = DepolarizationConstants.PmaxCut.i1
+const j1 = DepolarizationConstants.PmaxCut.j1
 
 # ------------------------------------------------------------
 # PHYSICAL AXIS SETUP
 # ------------------------------------------------------------
-const LBOX_PC = 50.0
+const LBOX_PC = DepolarizationConstants.PmaxCut.LBOX_PC
 ticks_pc = 0:10:50
 ticks = (collect(ticks_pc), string.(ticks_pc))
 
 # ------------------------------------------------------------
 # TYPOGRAPHY
 # ------------------------------------------------------------
-const TITLE_SIZE        = 30
-const XLABEL_SIZE       = 34
-const YLABEL_SIZE       = 34
-const XTICKLABEL_SIZE   = 24
-const YTICKLABEL_SIZE   = 24
-const CB_LABEL_SIZE     = 30
-const CB_TICKLABEL_SIZE = 24
-const CB_WIDTH          = 20
+const TITLE_SIZE = DepolarizationConstants.PmaxCut.TITLE_SIZE
+const XLABEL_SIZE = DepolarizationConstants.PmaxCut.XLABEL_SIZE
+const YLABEL_SIZE = DepolarizationConstants.PmaxCut.YLABEL_SIZE
+const XTICKLABEL_SIZE = DepolarizationConstants.PmaxCut.XTICKLABEL_SIZE
+const YTICKLABEL_SIZE = DepolarizationConstants.PmaxCut.YTICKLABEL_SIZE
+const CB_LABEL_SIZE = DepolarizationConstants.PmaxCut.CB_LABEL_SIZE
+const CB_TICKLABEL_SIZE = DepolarizationConstants.PmaxCut.CB_TICKLABEL_SIZE
+const CB_WIDTH = DepolarizationConstants.PmaxCut.CB_WIDTH
 
 function finite_minmax(A)
     mn = Inf

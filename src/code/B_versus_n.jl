@@ -6,25 +6,26 @@ using FITSIO;
 using CairoMakie;
 using Statistics;
 using LaTeXStrings;
+include(joinpath(@__DIR__, "../constants.jl"));
 include(joinpath(@__DIR__, "../io/fits_io.jl"));
 
 # -------------------------
 # USER CHOICES
 # -------------------------
-const DATA_DIR = "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024";
+const DATA_DIR = DepolarizationConstants.BVersusN.DATA_DIR;
 
-const FILE_BX = "Bx.fits";
-const FILE_BY = "By.fits";
-const FILE_BZ = "Bz.fits";
-const FILE_N  = "density.fits";
+const FILE_BX = DepolarizationConstants.BVersusN.FILE_BX;
+const FILE_BY = DepolarizationConstants.BVersusN.FILE_BY;
+const FILE_BZ = DepolarizationConstants.BVersusN.FILE_BZ;
+const FILE_N = DepolarizationConstants.BVersusN.FILE_N;
 
-const NBINS          = 30;
-const MIN_PER_BIN    = 50;
-const BINNING_IN_LOG = true;     # bins uniform in log10(n)
-const PLOT_LOGLOG    = true;     # log–log or linear
+const NBINS = DepolarizationConstants.BVersusN.NBINS;
+const MIN_PER_BIN = DepolarizationConstants.BVersusN.MIN_PER_BIN;
+const BINNING_IN_LOG = DepolarizationConstants.BVersusN.BINNING_IN_LOG;
+const PLOT_LOGLOG = DepolarizationConstants.BVersusN.PLOT_LOGLOG;
 
-const SAVE_FIG = true;
-const OUT_FIG  = "B_vs_n_line.pdf";
+const SAVE_FIG = DepolarizationConstants.BVersusN.SAVE_FIG;
+const OUT_FIG = DepolarizationConstants.BVersusN.OUT_FIG;
 
 # -------------------------
 # LOAD DATA

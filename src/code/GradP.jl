@@ -24,92 +24,79 @@ using Printf
 using CairoMakie
 using LaTeXStrings
 using Statistics
+include(joinpath(@__DIR__, "../constants.jl"))
 include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
 # USER SETTINGS
 # ------------------------------------------------------------
-const LOS = "y"  # "x" ou "y"
+const LOS = DepolarizationConstants.GradP.LOS
 
-const Q_path = LOS == "x" ?
-    "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024/x/Synchrotron/WithFaraday/Qnu.fits" :
-    "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024/y/Synchrotron/WithFaraday/Qnu.fits"
+const Q_path = DepolarizationConstants.GradP.Q_path
+const U_path = DepolarizationConstants.GradP.U_path
 
-const U_path = LOS == "x" ?
-    "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024/x/Synchrotron/WithFaraday/Unu.fits" :
-    "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024/y/Synchrotron/WithFaraday/Unu.fits"
+const SIMU_ROOT = DepolarizationConstants.GradP.SIMU_ROOT
+const DENSITY_PATH = DepolarizationConstants.GradP.DENSITY_PATH
 
-# density cube path (assumed at simulation root)
-const SIMU_ROOT = "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024"
-const DENSITY_PATH = joinpath(SIMU_ROOT, "density.fits")
+const Lbox_pc = DepolarizationConstants.GradP.Lbox_pc
+const NPIX = DepolarizationConstants.GradP.NPIX
+const dx_pc = DepolarizationConstants.GradP.dx_pc
 
-# Spatial scale: 50 pc across 256 pixels
-const Lbox_pc = 50.0
-const NPIX = 256
-const dx_pc = Lbox_pc / NPIX
+const PC_TO_CM = DepolarizationConstants.GradP.PC_TO_CM
+const dz_cm = DepolarizationConstants.GradP.dz_cm
 
-# For N_H units: convert LOS cell size to cm (pc -> cm)
-const PC_TO_CM = 3.085677581e18
-const dz_cm = dx_pc * PC_TO_CM
+const P_eps = DepolarizationConstants.GradP.P_eps
 
-# Numerical safety for division by |P|
-const P_eps = 1e-12
+const ν_min_Hz = DepolarizationConstants.GradP.ν_min_Hz
+const ν_max_Hz = DepolarizationConstants.GradP.ν_max_Hz
+const dν_Hz = DepolarizationConstants.GradP.dν_Hz
+const c_ms = DepolarizationConstants.GradP.c_ms
 
-# Frequency setup (Hz)
-const ν_min_Hz = 120e6
-const ν_max_Hz = 167e6         # only used for info display
-const dν_Hz    = 98e3
-const c_ms     = 299_792_458.0
-
-# Outputs
-const OUTDIR = dirname(Q_path)
-const SAVE_CUBES = true
-const GRADP_OUT    = joinpath(OUTDIR, "gradP_cube.fits")
-const GRADRM_OUT   = joinpath(OUTDIR, "gradRM_cube.fits")
-const NH_OUT       = joinpath(OUTDIR, "NH_map.fits")
-const GRADNH_OUT   = joinpath(OUTDIR, "grad_NH_map.fits")
+const OUTDIR = DepolarizationConstants.GradP.OUTDIR
+const SAVE_CUBES = DepolarizationConstants.GradP.SAVE_CUBES
+const GRADP_OUT = DepolarizationConstants.GradP.GRADP_OUT
+const GRADRM_OUT = DepolarizationConstants.GradP.GRADRM_OUT
+const NH_OUT = DepolarizationConstants.GradP.NH_OUT
+const GRADNH_OUT = DepolarizationConstants.GradP.GRADNH_OUT
 
 # ------------------------------------------------------------
 # PLOT SETTINGS
 # ------------------------------------------------------------
-const DO_PLOT_FOURPANELS = true
-const k_plot     = 10
-const SAVE_PLOT  = true
-const PLOT_EXT   = "pdf"
-const PLOTPATH   = joinpath(OUTDIR, @sprintf("gradP_gradRM_NH_gradNH_LOS_%s_k%04d.%s", LOS, k_plot, PLOT_EXT))
+const DO_PLOT_FOURPANELS = DepolarizationConstants.GradP.DO_PLOT_FOURPANELS
+const k_plot = DepolarizationConstants.GradP.k_plot
+const SAVE_PLOT = DepolarizationConstants.GradP.SAVE_PLOT
+const PLOT_EXT = DepolarizationConstants.GradP.PLOT_EXT
+const PLOTPATH = DepolarizationConstants.GradP.PLOTPATH
 
-# Color ranges (set vmin/vmax; if any is `nothing`, we auto from data)
-const GRADP_VMIN  = 0.0
-const GRADP_VMAX  = 40.0
-const GRADRM_VMIN = 0.0
-const GRADRM_VMAX = 1.0
+const GRADP_VMIN = DepolarizationConstants.GradP.GRADP_VMIN
+const GRADP_VMAX = DepolarizationConstants.GradP.GRADP_VMAX
+const GRADRM_VMIN = DepolarizationConstants.GradP.GRADRM_VMIN
+const GRADRM_VMAX = DepolarizationConstants.GradP.GRADRM_VMAX
 
-const NH_VMIN       = 1e20   # e.g. 0.0
-const NH_VMAX       = 1e21   # e.g. 5e21
-const GRADNH_VMIN   = nothing   # e.g. 0.0
-const GRADNH_VMAX   = nothing   # e.g. 5e21
+const NH_VMIN = DepolarizationConstants.GradP.NH_VMIN
+const NH_VMAX = DepolarizationConstants.GradP.NH_VMAX
+const GRADNH_VMIN = DepolarizationConstants.GradP.GRADNH_VMIN
+const GRADNH_VMAX = DepolarizationConstants.GradP.GRADNH_VMAX
 
-# Font sizes
-const LABELSIZE               = 28
-const TICKLABELSIZE           = 22
-const COLORBAR_LABELSIZE      = 26
-const COLORBAR_TICKLABELSIZE  = 22
-const NU_TITLESIZE            = 26
+const LABELSIZE = DepolarizationConstants.GradP.LABELSIZE
+const TICKLABELSIZE = DepolarizationConstants.GradP.TICKLABELSIZE
+const COLORBAR_LABELSIZE = DepolarizationConstants.GradP.COLORBAR_LABELSIZE
+const COLORBAR_TICKLABELSIZE = DepolarizationConstants.GradP.COLORBAR_TICKLABELSIZE
+const NU_TITLESIZE = DepolarizationConstants.GradP.NU_TITLESIZE
 
-# Axis ticks (pc)
-const ticks_pc = (0:10:50, string.(0:10:50))
+const ticks_pc = DepolarizationConstants.GradP.ticks_pc
 
 # ------------------------------------------------------------
 # FIGURE 2: PDF of normalized |∇P|
 # ------------------------------------------------------------
-const DO_PDF_GRADP_NORM = true
-const NBINS_PDF = 120
-const XRANGE_PDF = (-6.0, 6.0)
-const PDF_YLOG = false
-const PDF_LABELSIZE     = 28
-const PDF_TICKLABELSIZE = 22
-const PDF_LINEWIDTH     = 4
-const PDFPATH = joinpath(OUTDIR, @sprintf("PDF_gradPnorm_LOS_%s_k%04d.%s", LOS, k_plot, PLOT_EXT))
+const DO_PDF_GRADP_NORM = DepolarizationConstants.GradP.DO_PDF_GRADP_NORM
+const NBINS_PDF = DepolarizationConstants.GradP.NBINS_PDF
+const XRANGE_PDF = DepolarizationConstants.GradP.XRANGE_PDF
+const PDF_YLOG = DepolarizationConstants.GradP.PDF_YLOG
+const PDF_LABELSIZE = DepolarizationConstants.GradP.PDF_LABELSIZE
+const PDF_TICKLABELSIZE = DepolarizationConstants.GradP.PDF_TICKLABELSIZE
+const PDF_LINEWIDTH = DepolarizationConstants.GradP.PDF_LINEWIDTH
+const PDFPATH = DepolarizationConstants.GradP.PDFPATH
 
 # ------------------------------------------------------------
 # Build ν array (Hz) to match cube third axis exactly
