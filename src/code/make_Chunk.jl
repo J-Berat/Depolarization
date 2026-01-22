@@ -1,7 +1,6 @@
 using FITSIO
 using Printf
-
-include(joinpath(@__DIR__, "../io/fits_io.jl"))
+include("src/io/fits_io.jl")
 
 # -----------------------------------------------------------
 # PARAMETERS

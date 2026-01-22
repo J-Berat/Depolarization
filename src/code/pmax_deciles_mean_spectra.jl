@@ -4,7 +4,7 @@ using Statistics
 using Printf
 using LaTeXStrings
 
-include(joinpath(@__DIR__, "../io/fits_io.jl"))  # provides read_FITS, write_FITS
+include("src/io/fits_io.jl")
 
 # ------------------------------------------------------------
 # USER CHOICES

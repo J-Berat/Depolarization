@@ -23,7 +23,7 @@ using Printf
 using CairoMakie
 using LaTeXStrings
 using Statistics
-include(joinpath(@__DIR__, "../io/fits_io.jl"))
+include("src/io/fits_io.jl")
 
 # ------------------------------------------------------------
 # USER SETTINGS

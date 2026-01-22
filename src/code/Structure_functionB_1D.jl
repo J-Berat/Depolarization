@@ -2,7 +2,7 @@ using FITSIO
 using Statistics
 using CairoMakie
 using LaTeXStrings
-include(joinpath(@__DIR__, "../io/fits_io.jl"))
+include("src/io/fits_io.jl")
 
 # ------------------------------------------------------------
 # Extract B_parallel LOS signal (in μG)

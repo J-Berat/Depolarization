@@ -6,8 +6,8 @@ using Statistics
 using LaTeXStrings
 using Logging
 
-include(joinpath(@__DIR__, "../io/fits_io.jl"))
-include(joinpath(@__DIR__, "../los_utils.jl"))
+include("src/io/fits_io.jl")
+include("src/code/los_utils.jl")
 
 # ------------------------------------------------------------
 # USER CHOICES
