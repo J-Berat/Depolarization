@@ -4,6 +4,7 @@ using CairoMakie;
 using LaTeXStrings;
 using Statistics;
 using Printf;
+include(joinpath(@__DIR__, "../io/fits_io.jl"));
 
 # ============================================================
 # PATHS
@@ -56,13 +57,6 @@ PhiArray = collect(-10.0:0.25:10.0);
 # ============================================================
 # UTILITIES
 # ============================================================
-function write_fits_noheader(path::String, data)
-    isfile(path) && rm(path)
-    FITS(path, "w") do f
-        write(f, data)
-    end
-end
-
 function apply_instrument_2d(img::AbstractMatrix, H::AbstractMatrix)
     real.(ifft(fft(img) .* H))
 end
@@ -131,8 +125,8 @@ end
 # ============================================================
 # FILTER Q/U → RM-SYNTHESIS → Pmax
 # ============================================================
-Qdata = read_FITS_file(Q_in);
-Udata = read_FITS_file(U_in);
+Qdata = read_FITS(Q_in);
+Udata = read_FITS(U_in);
 
 for Llarge in Llarge_list
     tag = @sprintf("HardBandPass_remove_L0_to_1pc_and_%dto50pc", Int(round(Llarge)));
@@ -148,20 +142,20 @@ for Llarge in Llarge_list
     Qf = apply_to_array_xy(Qdata, H; n=n, m=m);
     Uf = apply_to_array_xy(Udata, H; n=n, m=m);
 
-    write_fits_noheader(joinpath(subdir, "Qnu_filtered.fits"), Qf);
-    write_fits_noheader(joinpath(subdir, "Unu_filtered.fits"), Uf);
+    write_FITS(joinpath(subdir, "Qnu_filtered.fits"), Qf);
+    write_FITS(joinpath(subdir, "Unu_filtered.fits"), Uf);
 
     absF, _, _ = RMSynthesis(Qf, Uf, nuArray, PhiArray; log_progress=true);
 
     Pmaxf = Pphi_max_map(absF);
     mkpath(joinpath(subdir, "RMSynthesis"));
-    write_fits_noheader(joinpath(subdir, "RMSynthesis", "Pphi_max.fits"), Pmaxf);
+    write_FITS(joinpath(subdir, "RMSynthesis", "Pphi_max.fits"), Pmaxf);
 end
 
 # ============================================================
 # LOAD RESULTS FOR PLOT
 # ============================================================
-Pmax0 = Float64.(read_FITS_file(Pmax_nofilter_path))
+Pmax0 = Float64.(read_FITS(Pmax_nofilter_path))
 
 Pmax_filt = Dict{Float64, Matrix{Float64}}()
 Hshift    = Dict{Float64, Matrix{Float64}}()
@@ -172,7 +166,7 @@ for Llarge in Llarge_list
     p = joinpath(base_out, tag, "RMSynthesis", "Pphi_max.fits")
     isfile(p) || continue
 
-    Pmax_filt[Llarge] = Float64.(read_FITS_file(p))
+    Pmax_filt[Llarge] = Float64.(read_FITS(p))
 
     _, Hs = instrument_bandpass_L(n, m;
                                   Δx=Δx, Δy=Δy,

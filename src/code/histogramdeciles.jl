@@ -3,6 +3,7 @@ using Statistics
 using StatsBase
 using CairoMakie
 using LaTeXStrings
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ============================================================
 # USER PARAMETERS
@@ -58,14 +59,14 @@ end
 # ============================================================
 # READ FITS
 # ============================================================
-Pmax = read(FITS(pmax_file)[1])
+Pmax = read_FITS(pmax_file)
 
-ne = read(FITS(ne_file)[1])
-T  = read(FITS(T_file)[1])
+ne = read_FITS(ne_file)
+T  = read_FITS(T_file)
 
-Bx = read(FITS(Bx_file)[1])
-By = read(FITS(By_file)[1])
-Bz = read(FITS(Bz_file)[1])
+Bx = read_FITS(Bx_file)
+By = read_FITS(By_file)
+Bz = read_FITS(Bz_file)
 
 # ============================================================
 # DEFINE REGIONS (1st & 10th deciles of Pmax)

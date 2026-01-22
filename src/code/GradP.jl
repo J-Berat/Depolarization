@@ -24,6 +24,7 @@ using Printf
 using CairoMakie
 using LaTeXStrings
 using Statistics
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
 # USER SETTINGS
@@ -109,19 +110,6 @@ const PDF_LABELSIZE     = 28
 const PDF_TICKLABELSIZE = 22
 const PDF_LINEWIDTH     = 4
 const PDFPATH = joinpath(OUTDIR, @sprintf("PDF_gradPnorm_LOS_%s_k%04d.%s", LOS, k_plot, PLOT_EXT))
-
-# ------------------------------------------------------------
-# FITS helpers
-# ------------------------------------------------------------
-read_fits(path::String) = FITS(path, "r") do f
-    read(f[1])
-end
-
-function write_fits(path::String, data)
-    FITS(path, "w") do f
-        write(f, data)
-    end
-end
 
 # ------------------------------------------------------------
 # Build ν array (Hz) to match cube third axis exactly
@@ -407,8 +395,8 @@ end
 @printf("[Info] Reading Q: %s\n", Q_path)
 @printf("[Info] Reading U: %s\n", U_path)
 
-Q = read_fits(Q_path)
-U = read_fits(U_path)
+Q = read_FITS(Q_path)
+U = read_FITS(U_path)
 
 @assert ndims(Q) == 3 "Q doit être un cube (ny,nx,nν). ndims(Q)=$(ndims(Q))"
 @assert size(Q) == size(U) "Q et U n'ont pas la même taille"
@@ -424,20 +412,20 @@ gradP_cube, gradRM_cube, ν_Hz = compute_grad_cubes(
 )
 
 if SAVE_CUBES
-    write_fits(GRADP_OUT,  gradP_cube)
-    write_fits(GRADRM_OUT, gradRM_cube)
+    write_FITS(GRADP_OUT,  gradP_cube)
+    write_FITS(GRADRM_OUT, gradRM_cube)
     @printf("[OK] Saved cubes:\n  %s\n  %s\n", GRADP_OUT, GRADRM_OUT)
 end
 
 @printf("[Info] Reading density cube: %s\n", DENSITY_PATH)
-density_cube = read_fits(DENSITY_PATH)
+density_cube = read_FITS(DENSITY_PATH)
 @assert ndims(density_cube) == 3 "density.fits doit être un cube 3D. ndims=$(ndims(density_cube))"
 
 NH_map, grad_NH_map = compute_NH_and_grad(density_cube; LOS=LOS, dx_pc=dx_pc, dz_cm=dz_cm)
 
 if SAVE_CUBES
-    write_fits(NH_OUT, NH_map)
-    write_fits(GRADNH_OUT, grad_NH_map)
+    write_FITS(NH_OUT, NH_map)
+    write_FITS(GRADNH_OUT, grad_NH_map)
     @printf("[OK] Saved N_H maps:\n  %s\n  %s\n", NH_OUT, GRADNH_OUT)
 end
 

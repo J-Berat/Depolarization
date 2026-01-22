@@ -6,6 +6,7 @@ using FITSIO;
 using CairoMakie;
 using Statistics;
 using LaTeXStrings;
+include(joinpath(@__DIR__, "../io/fits_io.jl"));
 
 # -------------------------
 # USER CHOICES
@@ -28,10 +29,10 @@ const OUT_FIG  = "B_vs_n_line.pdf";
 # -------------------------
 # LOAD DATA
 # -------------------------
-Bx = read(FITS(joinpath(DATA_DIR, FILE_BX))[1]);
-By = read(FITS(joinpath(DATA_DIR, FILE_BY))[1]);
-Bz = read(FITS(joinpath(DATA_DIR, FILE_BZ))[1]);
-n  = read(FITS(joinpath(DATA_DIR, FILE_N ))[1]);
+Bx = read_FITS(joinpath(DATA_DIR, FILE_BX));
+By = read_FITS(joinpath(DATA_DIR, FILE_BY));
+Bz = read_FITS(joinpath(DATA_DIR, FILE_BZ));
+n  = read_FITS(joinpath(DATA_DIR, FILE_N ));
 
 # -------------------------
 # BUILD |B| AND FLATTEN

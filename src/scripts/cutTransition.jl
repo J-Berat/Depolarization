@@ -2,7 +2,7 @@ using FITSIO
 using Printf
 using Statistics
 
-include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ============================================================
 # CUT CUBES BETWEEN (kmin,kmax) INTERVALS FROM A CSV

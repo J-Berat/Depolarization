@@ -2,13 +2,7 @@ using FITSIO
 using Statistics
 using CairoMakie
 using LaTeXStrings
-
-# ------------------------------------------------------------
-# IO
-# ------------------------------------------------------------
-read_fits(path::AbstractString) = FITS(path, "r") do f
-    read(f[1])
-end
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
 # Extract B_parallel LOS signal (in μG)
@@ -95,12 +89,12 @@ PMAX_PATH = joinpath(SIMU_ROOT, LOS, "Synchrotron", "WithFaraday", "Pmax.fits")
 # ------------------------------------------------------------
 # READ DATA
 # ------------------------------------------------------------
-Bx = read_fits(Bx_path)
-By = read_fits(By_path)
-Bz = read_fits(Bz_path)
+Bx = read_FITS(Bx_path)
+By = read_FITS(By_path)
+Bz = read_FITS(Bz_path)
 @assert ndims(Bx) == 3 && size(Bx) == size(By) == size(Bz)
 
-Pmax = read_fits(PMAX_PATH)
+Pmax = read_FITS(PMAX_PATH)
 @assert ndims(Pmax) == 2 "Pmax must be a 2D map"
 
 # ------------------------------------------------------------

@@ -1,6 +1,7 @@
 using FITSIO
 using CairoMakie
 using LaTeXStrings
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
 # INPUTS
@@ -49,15 +50,6 @@ const CB_LABEL_SIZE     = 30
 const CB_TICKLABEL_SIZE = 24
 const CB_WIDTH          = 20
 
-# ------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------
-function read_fits2d(file::AbstractString)
-    FITS(file, "r") do f
-        Array{Float32}(read(f[1]))
-    end
-end
-
 function finite_minmax(A)
     mn = Inf
     mx = -Inf
@@ -73,7 +65,7 @@ end
 # ------------------------------------------------------------
 # LOAD DATA
 # ------------------------------------------------------------
-maps = read_fits2d.(pmax_files)
+maps = [Float32.(read_FITS(file)) for file in pmax_files]
 xs = [range(0.0, LBOX_PC; length=size(M, 2)) for M in maps]
 ys = [range(0.0, LBOX_PC; length=size(M, 1)) for M in maps]
 

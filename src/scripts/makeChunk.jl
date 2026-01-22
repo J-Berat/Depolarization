@@ -1,7 +1,7 @@
 using FITSIO
 using Printf
 
-include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # -----------------------------------------------------------
 # PARAMETERS
@@ -68,9 +68,7 @@ function split_along_dim(
         outfile = joinpath(chunk_dir, base * ".fits")
         println("    Writing $outfile")
 
-        FITS(outfile, "w") do f
-            write(f, slice)  # minimal FITS header, no copy
-        end
+        write_FITS(outfile, slice)
     end
 end
 

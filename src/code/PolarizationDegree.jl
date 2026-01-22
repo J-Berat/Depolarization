@@ -2,6 +2,7 @@ using FITSIO
 using CairoMakie
 using Statistics
 using LaTeXStrings
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ------------------------------------------------------------
 # USER CHOICES
@@ -32,13 +33,6 @@ const OUT_DIR = joinpath(SYNCHRO_DIR, "Plots")
 const OUT_PDF = joinpath(OUT_DIR, "p_degree_$(LOS).pdf")
 
 mkpath(OUT_DIR)
-
-# ------------------------------------------------------------
-# FITS READER
-# ------------------------------------------------------------
-read_fits(path) = FITS(path, "r") do f
-    read(f[1])
-end
 
 # ------------------------------------------------------------
 # DEGREE OF POLARIZATION
@@ -97,9 +91,9 @@ end
 # ------------------------------------------------------------
 # RUN
 # ------------------------------------------------------------
-I = read_fits(I_FILE)
-Q = read_fits(Q_FILE)
-U = read_fits(U_FILE)
+I = read_FITS(I_FILE)
+Q = read_FITS(Q_FILE)
+U = read_FITS(U_FILE)
 
 p  = degree_polarization(I, Q, U)
 p2 = to_map(p)

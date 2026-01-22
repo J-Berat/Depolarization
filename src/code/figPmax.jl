@@ -2,6 +2,7 @@ using FITSIO
 using CairoMakie
 using Colors
 using LaTeXStrings
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # =========================
 # USER PARAMETERS
@@ -32,13 +33,6 @@ custom_plasma = cgrad(
     ],
     categorical = false
 )
-
-# =========================
-# Helpers
-# =========================
-read_fits_map(path::AbstractString) = FITS(path) do f
-    read(f[1])
-end
 
 # =========================
 # File paths
@@ -75,8 +69,8 @@ titles_pc = [
 # =========================
 # Read data
 # =========================
-P_chunks = [read_fits_map(f) for f in chunk_files]
-P_single = read_fits_map(single_file)
+P_chunks = [read_FITS(f) for f in chunk_files]
+P_single = read_FITS(single_file)
 
 # =========================
 # FIGURES: 4 independent chunk plots

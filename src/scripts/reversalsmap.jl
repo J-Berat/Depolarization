@@ -5,8 +5,8 @@ using Printf
 using Base.Threads
 using LaTeXStrings
 
-include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
-include(joinpath(@__DIR__, "../src/utils/los_utils.jl"))
+include(joinpath(@__DIR__, "../io/fits_io.jl"))
+include(joinpath(@__DIR__, "../analysis/los_utils.jl"))
 
 # ------------------------------------------------------------
 # USER CHOICES
