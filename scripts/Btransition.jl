@@ -6,6 +6,9 @@ using Statistics
 using LaTeXStrings
 using Logging
 
+include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
+include(joinpath(@__DIR__, "../src/utils/los_utils.jl"))
+
 # ------------------------------------------------------------
 # USER CHOICES
 # ------------------------------------------------------------
@@ -84,64 +87,6 @@ const B0_LW    = 2.0
 # FDF color
 const FDF_COLOR = :black   # ou :green
 
-# ------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------
-read_fits_array(path::AbstractString) = FITS(path, "r") do f
-    read(f[1])
-end
-
-function los_config(los::String)
-    if los == "x"
-        return ("Bx", (i, j, B) -> Array(@view B[:, i, j]))
-    elseif los == "y"
-        return ("By", (i, j, B) -> Array(@view B[i, :, j]))
-    elseif los == "z"
-        return ("Bz", (i, j, B) -> Array(@view B[i, j, :]))
-    else
-        error("LOS must be x/y/z")
-    end
-end
-
-function smooth_ma(x::AbstractVector, w::Int)
-    w = max(w, 1)
-    w = isodd(w) ? w : (w + 1)
-    n = length(x)
-    if w == 1
-        return collect(x)
-    end
-    y = similar(x, n)
-    h = (w - 1) ÷ 2
-    @inbounds for i in 1:n
-        i1 = max(1, i - h)
-        i2 = min(n, i + h)
-        y[i] = mean(@view x[i1:i2])
-    end
-    return y
-end
-
-@inline function sgn(x::Real; eps::Real=0.0)
-    if x > eps
-        return 1
-    elseif x < -eps
-        return -1
-    else
-        return 0
-    end
-end
-
-function reversal_indices(B::AbstractVector; eps::Real=0.0)
-    idx = Int[]
-    @inbounds for k in 1:(length(B)-1)
-        s1 = sgn(B[k]; eps=eps)
-        s2 = sgn(B[k+1]; eps=eps)
-        if s1 != 0 && s2 != 0 && s1 != s2
-            push!(idx, k)
-        end
-    end
-    return idx
-end
-
 count_reversals_in_window(ks::Vector{Int}, kL::Int, kR::Int) =
     count(k -> (k >= kL && k <= kR-1), ks)
 
@@ -183,7 +128,8 @@ function tight_bounds_for_reversal(B::Vector{Float64}, Δ::Real, k0::Int, ks_all
         if abs(d1[iL]) < deriv_tol
             break
         end
-        if sgn(d1[iL-1]) != 0 && sgn(d1[iL]) != 0 && sgn(d1[iL-1]) != sgn(d1[iL])
+        if sign_eps(d1[iL-1]) != 0 && sign_eps(d1[iL]) != 0 &&
+           sign_eps(d1[iL-1]) != sign_eps(d1[iL])
             break
         end
         if stop_at_next_reversal
@@ -204,7 +150,8 @@ function tight_bounds_for_reversal(B::Vector{Float64}, Δ::Real, k0::Int, ks_all
         if abs(d1[iR]) < deriv_tol
             break
         end
-        if sgn(d1[iR]) != 0 && sgn(d1[iR+1]) != 0 && sgn(d1[iR]) != sgn(d1[iR+1])
+        if sign_eps(d1[iR]) != 0 && sign_eps(d1[iR+1]) != 0 &&
+           sign_eps(d1[iR]) != sign_eps(d1[iR+1])
             break
         end
         if stop_at_next_reversal
@@ -348,8 +295,8 @@ Bcube = read_fits_array(BLOS_FILE)
 prof1  = B_SCALE .* profile_fun(i1,  j1,  Bcube)
 prof10 = B_SCALE .* profile_fun(i10, j10, Bcube)
 
-prof1_use  = SMOOTH_B ? smooth_ma(prof1,  SMOOTH_WIN) : prof1
-prof10_use = SMOOTH_B ? smooth_ma(prof10, SMOOTH_WIN) : prof10
+prof1_use  = SMOOTH_B ? smooth_moving_average(prof1,  SMOOTH_WIN) : prof1
+prof10_use = SMOOTH_B ? smooth_moving_average(prof10, SMOOTH_WIN) : prof10
 
 # ne cube
 NE_FILE = joinpath(SIMU_DIR, LOS, "Synchrotron", "ne.fits")

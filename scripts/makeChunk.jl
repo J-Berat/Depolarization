@@ -1,6 +1,8 @@
 using FITSIO
 using Printf
 
+include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
+
 # -----------------------------------------------------------
 # PARAMETERS
 # -----------------------------------------------------------
@@ -35,17 +37,6 @@ const FIELDS = [
     "Vx", "Vy", "Vz",
     "density", "temperature",
 ]
-
-# -----------------------------------------------------------
-# READ FITS (NO HEADER)
-# -----------------------------------------------------------
-
-function read_fits_array(path::String)
-    f = FITS(path, "r")
-    data = read(f[1])
-    close(f)
-    return data
-end
 
 # -----------------------------------------------------------
 # GENERIC SPLIT FUNCTION

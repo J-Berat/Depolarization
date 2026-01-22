@@ -2,6 +2,8 @@ using FITSIO
 using Printf
 using Statistics
 
+include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
+
 # ============================================================
 # CUT CUBES BETWEEN (kmin,kmax) INTERVALS FROM A CSV
 # + intervals CSV includes distances in pc
@@ -49,21 +51,6 @@ const VAR_FILEMAP = Dict(
 # ------------------------------------------------------------
 # HELPERS
 # ------------------------------------------------------------
-
-read_fits_array(path::AbstractString) =
-    FITS(path, "r") do f
-        read(f[1])
-    end
-
-function write_fits_array(path::AbstractString, A; overwrite::Bool=true)
-    if overwrite && isfile(path)
-        rm(path; force=true)
-    end
-    FITS(path, "w") do f
-        write(f, A)
-    end
-end
-
 function read_intervals_from_csv(path::String)
     @assert isfile(path) "Missing CSV: $path"
     lines = readlines(path)

@@ -5,6 +5,9 @@ using Printf
 using Base.Threads
 using LaTeXStrings
 
+include(joinpath(@__DIR__, "../src/utils/fits_utils.jl"))
+include(joinpath(@__DIR__, "../src/utils/los_utils.jl"))
+
 # ------------------------------------------------------------
 # USER CHOICES
 # ------------------------------------------------------------
@@ -29,65 +32,6 @@ const SAVE_EXT  = "pdf"
 
 const LABSIZE  = 25
 const TICKSIZE = 25
-
-# ------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------
-
-read_fits_array(path::AbstractString) = FITS(path, "r") do f
-    read(f[1])
-end
-
-function los_config(los::String)
-    if los == "x"
-        return ("Bx", (i, j, B) -> Array(@view B[:, i, j]))
-    elseif los == "y"
-        return ("By", (i, j, B) -> Array(@view B[i, :, j]))
-    elseif los == "z"
-        return ("Bz", (i, j, B) -> Array(@view B[i, j, :]))
-    else
-        error("LOS must be x/y/z")
-    end
-end
-
-function smooth_ma(x::AbstractVector, w::Int)
-    w = max(w, 1)
-    w = isodd(w) ? w : (w + 1)
-    n = length(x)
-    if w == 1
-        return collect(x)
-    end
-    y = similar(x, n)
-    h = (w - 1) ÷ 2
-    @inbounds for i in 1:n
-        i1 = max(1, i - h)
-        i2 = min(n, i + h)
-        y[i] = mean(@view x[i1:i2])
-    end
-    return y
-end
-
-@inline function sgn(x::Real; eps::Real=0.0)
-    if x > eps
-        return 1
-    elseif x < -eps
-        return -1
-    else
-        return 0
-    end
-end
-
-function reversal_indices(B::AbstractVector; eps::Real=0.0)
-    idx = Int[]
-    @inbounds for k in 1:(length(B)-1)
-        s1 = sgn(B[k]; eps=eps)
-        s2 = sgn(B[k+1]; eps=eps)
-        if s1 != 0 && s2 != 0 && s1 != s2
-            push!(idx, k)  # reversal between k and k+1
-        end
-    end
-    return idx
-end
 
 # ------------------------------------------------------------
 # MAIN
@@ -118,7 +62,7 @@ nrev = Array{Int16}(undef, NPIX, NPIX)
 @threads for j in 1:NPIX
     for i in 1:NPIX
         prof = B_SCALE .* profile_fun(i, j, Bcube)
-        prof_use = SMOOTH_B ? smooth_ma(prof, SMOOTH_WIN) : prof
+        prof_use = SMOOTH_B ? smooth_moving_average(prof, SMOOTH_WIN) : prof
         nrev[i, j] = Int16(length(reversal_indices(prof_use; eps=SIGN_EPS)))
     end
 end
@@ -154,7 +98,7 @@ end
 
 # extract the sightline
 prof = B_SCALE .* profile_fun(i0, j0, Bcube)
-prof_use = SMOOTH_B ? smooth_ma(prof, SMOOTH_WIN) : prof
+prof_use = SMOOTH_B ? smooth_moving_average(prof, SMOOTH_WIN) : prof
 ks = reversal_indices(prof_use; eps=SIGN_EPS)
 n_here = length(ks)
 
