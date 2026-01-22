@@ -3,32 +3,31 @@ using Statistics
 using StatsBase
 using CairoMakie
 using LaTeXStrings
-include(joinpath(@__DIR__, "../constants.jl"))
 include(joinpath(@__DIR__, "../io/fits_io.jl"))
 
 # ============================================================
 # USER PARAMETERS
 # ============================================================
-const SIMU_ROOT = DepolarizationConstants.HistogramDeciles.SIMU_ROOT
+const SIMU_ROOT = "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024"
 
-const LOS = DepolarizationConstants.HistogramDeciles.LOS
+const LOS = "y"
 
-const LBOX_PC = DepolarizationConstants.HistogramDeciles.LBOX_PC
-const NPIX = DepolarizationConstants.HistogramDeciles.NPIX
-const PC_PER_PIX = DepolarizationConstants.HistogramDeciles.PC_PER_PIX
+const LBOX_PC = 50.0
+const NPIX = 256
+const PC_PER_PIX = LBOX_PC / NPIX
 
-const VMIN = DepolarizationConstants.HistogramDeciles.VMIN
-const VMAX = DepolarizationConstants.HistogramDeciles.VMAX
-const COLOR_RANGE = DepolarizationConstants.HistogramDeciles.COLOR_RANGE
+const VMIN = 0.0
+const VMAX = 12.0
+const COLOR_RANGE = (VMIN, VMAX)
 
-const LABEL_SIZE = DepolarizationConstants.HistogramDeciles.LABEL_SIZE
-const TICKLABEL_SIZE = DepolarizationConstants.HistogramDeciles.TICKLABEL_SIZE
-const TITLE_SIZE = DepolarizationConstants.HistogramDeciles.TITLE_SIZE
-const LEGEND_SIZE = DepolarizationConstants.HistogramDeciles.LEGEND_SIZE
-const COLORBAR_SIZE = DepolarizationConstants.HistogramDeciles.COLORBAR_SIZE
+const LABEL_SIZE = 26
+const TICKLABEL_SIZE = 22
+const TITLE_SIZE = 26
+const LEGEND_SIZE = 22
+const COLORBAR_SIZE = 24
 
-const SAVE_PDF = DepolarizationConstants.HistogramDeciles.SAVE_PDF
-const OUT_PDF = DepolarizationConstants.HistogramDeciles.OUT_PDF
+const SAVE_PDF = true
+const OUT_PDF = joinpath(SIMU_ROOT, "Pmax_deciles_histograms_LOS_$LOS.pdf")
 
 # ============================================================
 # FILE PATHS

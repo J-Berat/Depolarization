@@ -4,24 +4,23 @@ using Statistics
 using Printf
 using LaTeXStrings
 
-include(joinpath(@__DIR__, "../constants.jl"))
 include(joinpath(@__DIR__, "../io/fits_io.jl"))  # provides read_FITS, write_FITS
 
 # ------------------------------------------------------------
 # USER CHOICES
 # ------------------------------------------------------------
-const SIMU_ROOT = DepolarizationConstants.PmaxDecilesMeanSpectra.SIMU_ROOT
-const SIMU_NAME = DepolarizationConstants.PmaxDecilesMeanSpectra.SIMU_NAME
-const LOS = DepolarizationConstants.PmaxDecilesMeanSpectra.LOS
+const SIMU_ROOT = "/Users/jb270005/Desktop/simu_RAMSES"
+const SIMU_NAME = "d1cf05bx10rms18000nograv1024"
+const LOS = "y"
 
-const LBOX_PC = DepolarizationConstants.PmaxDecilesMeanSpectra.LBOX_PC
-const SAVE_FIG = DepolarizationConstants.PmaxDecilesMeanSpectra.SAVE_FIG
-const OUT_DIR = DepolarizationConstants.PmaxDecilesMeanSpectra.OUT_DIR
-const OUT_EXT = DepolarizationConstants.PmaxDecilesMeanSpectra.OUT_EXT
+const LBOX_PC = 50.0
+const SAVE_FIG = true
+const OUT_DIR = "/Users/jb270005/Desktop/Depolarization_canals"
+const OUT_EXT = "pdf"
 
-const USE_COLRANGE = DepolarizationConstants.PmaxDecilesMeanSpectra.USE_COLRANGE
-const VMIN = DepolarizationConstants.PmaxDecilesMeanSpectra.VMIN
-const VMAX = DepolarizationConstants.PmaxDecilesMeanSpectra.VMAX
+const USE_COLRANGE = false
+const VMIN = 0.0
+const VMAX = 12.0
 
 # ------------------------------------------------------------
 # PATHS
