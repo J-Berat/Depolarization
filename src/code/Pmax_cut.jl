@@ -1,7 +1,7 @@
 using FITSIO
 using CairoMakie
 using LaTeXStrings
-include("src/io/fits_io.jl")
+include("Desktop/Depolarization/src/io/fits_io.jl")
 
 # ------------------------------------------------------------
 # INPUTS

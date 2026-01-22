@@ -23,7 +23,7 @@ using Printf
 using CairoMakie
 using LaTeXStrings
 using Statistics
-include("src/io/fits_io.jl")
+include("Desktop/Depolarization/src/io/fits_io.jl")
 
 # ------------------------------------------------------------
 # USER SETTINGS

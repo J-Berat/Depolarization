@@ -6,8 +6,8 @@ using Statistics
 using LaTeXStrings
 using Logging
 
-include("src/io/fits_io.jl")
-include("src/code/los_utils.jl")
+include("Desktop/Depolarization/src/io/fits_io.jl")
+include("Desktop/Depolarization/src/code/los_utils.jl")
 
 # ------------------------------------------------------------
 # USER CHOICES

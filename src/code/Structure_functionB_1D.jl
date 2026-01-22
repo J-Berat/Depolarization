@@ -2,7 +2,7 @@ using FITSIO
 using Statistics
 using CairoMakie
 using LaTeXStrings
-include("src/io/fits_io.jl")
+include("Desktop/Depolarization/src/io/fits_io.jl")
 
 # ------------------------------------------------------------
 # Extract B_parallel LOS signal (in μG)
