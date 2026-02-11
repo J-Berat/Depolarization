@@ -1,6 +1,6 @@
 using FITSIO
 using Printf
-include("Desktop/Depolarization/src/io/fits_io.jl")
+include("Desktop/Depolarization/src/code/fits_io.jl")
 
 # -----------------------------------------------------------
 # PARAMETERS

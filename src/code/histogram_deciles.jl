@@ -3,7 +3,7 @@ using Statistics
 using StatsBase
 using CairoMakie
 using LaTeXStrings
-include("Desktop/Depolarization/src/io/fits_io.jl")
+include("Desktop/Depolarization/src/code/fits_io.jl")
 
 # ============================================================
 # USER PARAMETERS

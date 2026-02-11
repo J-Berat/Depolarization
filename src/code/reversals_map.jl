@@ -5,7 +5,7 @@ using Printf
 using Base.Threads
 using LaTeXStrings
 
-include("Desktop/Depolarization/src/io/fits_io.jl")
+include("Desktop/Depolarization/src/code/fits_io.jl")
 include("Desktop/Depolarization/src/code/los_utils.jl")
 
 # ------------------------------------------------------------

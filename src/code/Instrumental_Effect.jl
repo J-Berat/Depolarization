@@ -4,7 +4,7 @@ using CairoMakie;
 using LaTeXStrings;
 using Statistics;
 using Printf;
-include("Desktop/Depolarization/src/io/fits_io.jl");
+include("Desktop/Depolarization/src/code/fits_io.jl");
 
 # ============================================================
 # PATHS
