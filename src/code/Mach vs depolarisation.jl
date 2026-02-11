@@ -12,10 +12,11 @@
 # No grids anywhere
 ############################################################
 
-using FITSIO
 using Statistics
 using CairoMakie
 using LaTeXStrings
+
+include("fits_io.jl")
 
 # ----------------------------------------------------------
 # Parameters
@@ -57,10 +58,6 @@ SimuList = [
 # ----------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------
-read_fits(p::AbstractString) = FITS(p, "r") do f
-    read(f[1])
-end
-
 phys_dir(s) = joinpath(ROOT, s)
 pmax_path(s; los) =
     joinpath(ROOT, s, los, "Synchrotron", "WithFaraday", "Pmax.fits")
@@ -93,16 +90,16 @@ RMSlbl          = String[]
 for simu in SimuList
     dir = phys_dir(simu)
 
-    n  = Float32.(read_fits(joinpath(dir, "density.fits")))
-    T  = Float32.(read_fits(joinpath(dir, "temperature.fits")))
+    n  = Float32.(read_FITS(joinpath(dir, "density.fits")))
+    T  = Float32.(read_FITS(joinpath(dir, "temperature.fits")))
 
-    Bx = Float32.(read_fits(joinpath(dir, "Bx.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
-    By = Float32.(read_fits(joinpath(dir, "By.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
-    Bz = Float32.(read_fits(joinpath(dir, "Bz.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
+    Bx = Float32.(read_FITS(joinpath(dir, "Bx.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
+    By = Float32.(read_FITS(joinpath(dir, "By.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
+    Bz = Float32.(read_FITS(joinpath(dir, "Bz.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
 
-    Vx = to_cgs(Float32.(read_fits(joinpath(dir, "Vx.fits"))))
-    Vy = to_cgs(Float32.(read_fits(joinpath(dir, "Vy.fits"))))
-    Vz = to_cgs(Float32.(read_fits(joinpath(dir, "Vz.fits"))))
+    Vx = to_cgs(Float32.(read_FITS(joinpath(dir, "Vx.fits"))))
+    Vy = to_cgs(Float32.(read_FITS(joinpath(dir, "Vy.fits"))))
+    Vz = to_cgs(Float32.(read_FITS(joinpath(dir, "Vz.fits"))))
 
     vmag = sqrt.(Vx.^2 .+ Vy.^2 .+ Vz.^2)
     Ms   = mean(vmag ./ cs(T))
@@ -113,8 +110,8 @@ for simu in SimuList
 
     push!(Mach3D, Ms)
     push!(MachA3D, MA)
-    push!(P10_y, depol_P10(Float32.(read_fits(pmax_path(simu; los=LOS_Y)))))
-    push!(P10_x, depol_P10(Float32.(read_fits(pmax_path(simu; los=LOS_X)))))
+    push!(P10_y, depol_P10(Float32.(read_FITS(pmax_path(simu; los=LOS_Y)))))
+    push!(P10_x, depol_P10(Float32.(read_FITS(pmax_path(simu; los=LOS_X)))))
     push!(RMSlbl, rms_label(simu))
 end
 

@@ -17,10 +17,11 @@
 # Remove xlabels/xticklabels from first row (as requested previously)
 ############################################################
 
-using FITSIO
 using Statistics
 using CairoMakie
 using LaTeXStrings
+
+include("fits_io.jl")
 
 # ----------------------------------------------------------
 # Parameters
@@ -62,10 +63,6 @@ SimuList = [
 # ----------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------
-read_fits(p::AbstractString) = FITS(p, "r") do f
-    read(f[1])
-end
-
 phys_dir(s) = joinpath(ROOT, s)
 pmax_path(s; los) =
     joinpath(ROOT, s, los, "Synchrotron", "WithFaraday", "Pmax.fits")
@@ -107,7 +104,7 @@ rms_colors = Dict(
 function global_P10_threshold(SimuList, los)
     allvals = Float32[]
     for simu in SimuList
-        P = Float32.(read_fits(pmax_path(simu; los=los)))
+        P = Float32.(read_FITS(pmax_path(simu; los=los)))
         append!(allvals, finite_vec(P))
     end
     return quantile(allvals, 0.10)
@@ -129,16 +126,16 @@ RMSlbl          = String[]
 for simu in SimuList
     dir = phys_dir(simu)
 
-    n  = Float32.(read_fits(joinpath(dir, "density.fits")))
-    T  = Float32.(read_fits(joinpath(dir, "temperature.fits")))
+    n  = Float32.(read_FITS(joinpath(dir, "density.fits")))
+    T  = Float32.(read_FITS(joinpath(dir, "temperature.fits")))
 
-    Bx = Float32.(read_fits(joinpath(dir, "Bx.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
-    By = Float32.(read_fits(joinpath(dir, "By.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
-    Bz = Float32.(read_fits(joinpath(dir, "Bz.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
+    Bx = Float32.(read_FITS(joinpath(dir, "Bx.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
+    By = Float32.(read_FITS(joinpath(dir, "By.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
+    Bz = Float32.(read_FITS(joinpath(dir, "Bz.fits"))) .* Float32(B_MG_TO_UG) .* 1f-6
 
-    Vx = to_cgs(Float32.(read_fits(joinpath(dir, "Vx.fits"))))
-    Vy = to_cgs(Float32.(read_fits(joinpath(dir, "Vy.fits"))))
-    Vz = to_cgs(Float32.(read_fits(joinpath(dir, "Vz.fits"))))
+    Vx = to_cgs(Float32.(read_FITS(joinpath(dir, "Vx.fits"))))
+    Vy = to_cgs(Float32.(read_FITS(joinpath(dir, "Vy.fits"))))
+    Vz = to_cgs(Float32.(read_FITS(joinpath(dir, "Vz.fits"))))
 
     vmag = sqrt.(Vx.^2 .+ Vy.^2 .+ Vz.^2)
     Ms   = mean(vmag ./ cs(T))
@@ -147,8 +144,8 @@ for simu in SimuList
     vA   = Bmag ./ sqrt.(4f0 * Float32(pi) .* rho(n))
     MA   = mean(vmag ./ vA)
 
-    P_y = Float32.(read_fits(pmax_path(simu; los=LOS_Y)))
-    P_x = Float32.(read_fits(pmax_path(simu; los=LOS_X)))
+    P_y = Float32.(read_FITS(pmax_path(simu; los=LOS_Y)))
+    P_x = Float32.(read_FITS(pmax_path(simu; los=LOS_X)))
 
     push!(Mach3D, Ms)
     push!(MachA3D, MA)

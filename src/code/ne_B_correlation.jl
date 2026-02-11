@@ -1,14 +1,8 @@
-using FITSIO
 using Statistics
 using CairoMakie
 using LaTeXStrings
 
-# ============================================================
-# FITS READER 
-# ============================================================
-function read_FITS_file(file)
-    read(FITS(file)[1])
-end
+include("fits_io.jl")
 
 # ============================================================
 # PATHS & FILES
@@ -88,10 +82,10 @@ end
 # ============================================================
 # LOAD DATA
 # ============================================================
-Bx = read_FITS_file(joinpath(DATA_DIR, FILE_BX))
-By = read_FITS_file(joinpath(DATA_DIR, FILE_BY))
-Bz = read_FITS_file(joinpath(DATA_DIR, FILE_BZ))
-ne = read_FITS_file(ne_path(DATA_DIR, LOS))
+Bx = read_FITS(joinpath(DATA_DIR, FILE_BX))
+By = read_FITS(joinpath(DATA_DIR, FILE_BY))
+Bz = read_FITS(joinpath(DATA_DIR, FILE_BZ))
+ne = read_FITS(ne_path(DATA_DIR, LOS))
 
 @assert size(Bx) == size(By) == size(Bz) == size(ne) "Cube size mismatch"
 
