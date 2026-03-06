@@ -34,9 +34,18 @@ Base.@kwdef struct RunFlags
     run_lic::Bool = false
 end
 
+"""
+    load_config_defaults(...)
+
+    Builds default instrumental-pipeline config.
+"""
 function load_config_defaults()
-    root = "/Users/jb270005/Desktop/simu_RAMSES/d1cf05bx10rms18000nograv1024"
-    base = joinpath(root, "y", "Synchrotron", "WithFaraday")
+    sim_root = get(ENV, "SIMULATIONS_ROOT", "./data/simu_RAMSES")
+    simu_name = get(ENV, "SIMU_NAME", "d1cf05bx10rms18000nograv1024")
+    los = get(ENV, "SIMU_LOS", "y")
+
+    root = joinpath(sim_root, simu_name)
+    base = joinpath(root, los, "Synchrotron", "WithFaraday")
 
     InstrumentalConfig(
         Q_in = joinpath(base, "Qnu.fits"),
@@ -52,6 +61,11 @@ function load_config_defaults()
     )
 end
 
+"""
+    rm_synthesis_axes(...)
+
+    Returns `nu` and `phi` axes for RM synthesis.
+"""
 function rm_synthesis_axes(cfg::InstrumentalConfig)
     nuArray = (cfg.νmin_MHz:cfg.Δν_MHz:cfg.νmax_MHz) .* 1e6
     return nuArray, cfg.PhiArray

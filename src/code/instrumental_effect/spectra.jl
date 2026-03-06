@@ -1,3 +1,8 @@
+"""
+    psd2d(...)
+
+    2D power spectral density.
+"""
 function psd2d(img::AbstractMatrix)
     A = float.(img)
     A .-= mean(A)
@@ -6,6 +11,11 @@ function psd2d(img::AbstractMatrix)
     return fftshift(P)
 end
 
+"""
+    psd1d_isotropic(...)
+
+    Radially binned isotropic 1D PSD.
+"""
 function psd1d_isotropic(img::AbstractMatrix, kx::AbstractVector, ky::AbstractVector;
                          nbins::Int=80, kmin::Real=0.0, kmax::Real=Inf)
     n, m = size(img)
@@ -41,6 +51,11 @@ function psd1d_isotropic(img::AbstractMatrix, kx::AbstractVector, ky::AbstractVe
     return centers, Pk
 end
 
+"""
+    psd1d_x_mean_over_y(...)
+
+    1D PSD along `kx`, averaged over `y`.
+"""
 function psd1d_x_mean_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mean::Bool=true)
     n, _ = size(img)
     @assert length(kx) == n
@@ -56,6 +71,11 @@ function psd1d_x_mean_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mea
     return kx, fftshift(Pkx)
 end
 
+"""
+    kpeak_in_window(...)
+
+    Finds dominant spectral peak in a `k` window.
+"""
 function kpeak_in_window(k::AbstractVector, y::AbstractVector; kmin::Real=0.0, kmax::Real=Inf)
     ok = isfinite.(k) .& isfinite.(y) .& (k .> 0) .& (y .> 0) .& (k .>= kmin) .& (k .<= kmax)
     if !any(ok)

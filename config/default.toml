@@ -1,0 +1,88 @@
+[paths]
+simulations_root = "/Users/jb270005/Desktop/simu_RAMSES"
+outputs_root = "./outputs"
+transitions_csv_root = "./data/transitions"
+
+[simulation]
+name = "d1cf05bx10rms18000nograv1024"
+los = "y"
+
+[tasks.cut_transition]
+transitions_csv = "BLOS_decile1_LOSy_transitions.csv"
+npix = 256
+lbox_pc = 50.0
+merge_gap_pix = 1
+overwrite = true
+
+[tasks.make_chunk]
+chunk_size = 32
+
+[tasks.grad_p]
+nu_min_hz = 120000000.0
+nu_max_hz = 167000000.0
+dnu_hz = 98000.0
+k_plot = 10
+save_cubes = true
+
+[tasks.spectral_index]
+nu0_hz = 120000000.0
+dnu_hz = 98000.0
+lbox_pc = 50.0
+
+[tasks.reversals_map]
+npix = 256
+lbox_pc = 50.0
+b_scale = 1000.0
+target_nrev = 24
+
+[tasks.b_transition]
+npix = 256
+lbox_pc = 50.0
+b_scale = 1000.0
+nphi = 81
+
+[tasks.histogram_deciles]
+npix = 256
+lbox_pc = 50.0
+
+[tasks.structure_functionb_1d]
+lbox_pc = 50.0
+i_map = 30
+j_map = 128
+maxlag = 120
+
+[tasks.mach_suite]
+los_y = "y"
+los_x = "x"
+
+[tasks.reversal_transition_job]
+enabled = true
+
+[tasks.segmentation_pipeline_job]
+enabled = true
+
+[tasks.instrumental_effect]
+run_pmax_maps = true
+run_psd = true
+run_q_u_p_q2 = true
+run_phi_q_u_p = true
+run_lic = false
+
+[tasks.pmax_norm]
+simu_index = 7
+los = "y"
+
+[tasks.b_orientation_cube]
+los = "y"
+
+[tasks.ne_b_correlation]
+what = "rF"
+
+[tasks.polarization_degree]
+los = "y"
+
+[tasks.pmax_deciles_mean_spectra]
+out_ext = "pdf"
+
+[tasks.vorticity_compressibility_canals]
+lbox_pc = 50.0

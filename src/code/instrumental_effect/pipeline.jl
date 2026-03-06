@@ -1,20 +1,36 @@
+"""
+    _filter_tag(...)
+
+    Builds filter tag text.
+"""
 function _filter_tag(Llarge::Real)
     @sprintf("HardBandPass_remove_L0_to_1pc_and_%dto50pc", Int(round(Llarge)))
 end
 
-function _robust_colorrange(Pmax0, Pmax_filt::Dict{Float64, Matrix}, L_ok::Vector{Float64})
+"""
+    _robust_colorrange(...)
+
+    Computes robust map color bounds.
+"""
+function _robust_colorrange(Pmax0, Pmax_filt::AbstractDict{<:Real, <:AbstractMatrix}, L_ok::Vector{Float64})
     vals = vec(float.(Pmax0))
     for Llarge in L_ok
         append!(vals, vec(float.(Pmax_filt[Llarge])))
     end
     vals = vals[isfinite.(vals)]
+    isempty(vals) && error("No finite values available to compute color range")
     sort!(vals)
     lo = vals[clamp(round(Int, 0.01 * length(vals)), 1, length(vals))]
     hi = vals[clamp(round(Int, 0.99 * length(vals)), 1, length(vals))]
     return (lo, hi)
 end
 
-function _collect_series(no_filter_img, filtered_imgs::Dict{Float64, Matrix},
+"""
+    _collect_series(...)
+
+    Assembles spectra series descriptors.
+"""
+function _collect_series(no_filter_img, filtered_imgs::AbstractDict{<:Real, <:AbstractMatrix},
                          kx::AbstractVector, Lsorted::Vector{Float64};
                          nofilter_label::LaTeXString=LaTeXString("\\mathrm{no\\ filter}"))
     cols = curve_colors(1 + length(Lsorted))
@@ -39,78 +55,140 @@ function _collect_series(no_filter_img, filtered_imgs::Dict{Float64, Matrix},
     return series
 end
 
+"""
+    _rm_log_progress_enabled(...)
+
+Controls RM synthesis progress logging. Progress logging is enabled by default
+outside CI, with optional explicit override via
+`DEPOL_RM_LOG_PROGRESS=1|0`.
+"""
+function _rm_log_progress_enabled()
+    raw = lowercase(strip(get(ENV, "DEPOL_RM_LOG_PROGRESS", "")))
+    if raw in ("1", "true", "yes", "on")
+        return true
+    elseif raw in ("0", "false", "no", "off")
+        return false
+    end
+    return isempty(get(ENV, "CI", ""))
+end
+
+"""
+    _validate_filter_inputs(...)
+
+    Validates runtime config and loaded filtering inputs.
+"""
+function _validate_filter_inputs(cfg::InstrumentalConfig, Qdata, Udata, Pmax0, nuArray, PhiArray)
+    validate_instrumental_config!(cfg)
+
+    nν = length(nuArray)
+    nν > 0 || error("Empty frequency axis from rm_synthesis_axes")
+    length(PhiArray) > 0 || error("Empty Phi axis in cfg.PhiArray")
+
+    q_layout = require_stokes_cube_layout(Qdata, "Qnu", cfg, nν)
+    u_layout = require_stokes_cube_layout(Udata, "Unu", cfg, nν)
+    q_layout == u_layout || error("Qnu/Unu cube layout mismatch: Qnu frequency axis dim=$q_layout, Unu frequency axis dim=$u_layout")
+
+    require_channel_index(cfg.ichan, nν, "ichan")
+    require_map_layout(Pmax0, "Pmax", cfg)
+
+    return true
+end
+
+"""
+    _process_single_filter(...)
+
+    Computes one filter level and writes filtered outputs.
+"""
+function _process_single_filter(cfg::InstrumentalConfig, scales, nuArray, PhiArray,
+                                Qdata, Udata, Llarge::Float64; log_progress::Bool)
+    tag = _filter_tag(Llarge)
+    subdir = joinpath(cfg.base_out, tag)
+    mkpath(subdir)
+
+    H, _ = instrument_bandpass_L(cfg.n, cfg.m;
+                                 Δx=scales.Δx, Δy=scales.Δy,
+                                 Lcut_small=cfg.Lcut_small,
+                                 Llarge=Llarge,
+                                 fNy=scales.fNy)
+
+    Qf = apply_to_array_xy(Qdata, H; n=cfg.n, m=cfg.m)
+    Uf = apply_to_array_xy(Udata, H; n=cfg.n, m=cfg.m)
+
+    Qslice = Float32.(get_chan_xy(Qf, cfg.ichan, cfg.n, cfg.m))
+    Uslice = Float32.(get_chan_xy(Uf, cfg.ichan, cfg.n, cfg.m))
+
+    write_FITS(joinpath(subdir, "Qnu_filtered.fits"), Qf)
+    write_FITS(joinpath(subdir, "Unu_filtered.fits"), Uf)
+
+    absF, _, _ = RMSynthesis(Qf, Uf, nuArray, PhiArray; log_progress=log_progress)
+    Pmaxf = Float32.(Pphi_max_map(absF))
+
+    rm_dir = joinpath(subdir, "RMSynthesis")
+    mkpath(rm_dir)
+    write_FITS(joinpath(rm_dir, "Pphi_max.fits"), Pmaxf)
+
+    return (Llarge=Llarge, Qslice=Qslice, Uslice=Uslice, Pmaxf=Pmaxf)
+end
+
+"""
+    run_filter_pass(...)
+
+    Executes filtering pass and writes filtered products.
+"""
 function run_filter_pass(cfg::InstrumentalConfig)
     mkpath(cfg.base_out)
 
     scales = grid_scales(cfg)
     axes = spectral_axes(cfg, scales.Δx, scales.Δy)
 
-    @info "Grid" cfg.n cfg.m scales.Δx scales.Δy scales.fNy
+    @debug "Grid" cfg.n cfg.m scales.Δx scales.Δy scales.fNy
 
     nuArray, PhiArray = rm_synthesis_axes(cfg)
 
     Qdata = read_FITS(cfg.Q_in)
     Udata = read_FITS(cfg.U_in)
+    Pmax0 = Float32.(read_FITS(cfg.Pmax_nofilter_path))
+
+    _validate_filter_inputs(cfg, Qdata, Udata, Pmax0, nuArray, PhiArray)
 
     Qslice_filt = Dict{Float64, Matrix{Float32}}()
     Uslice_filt = Dict{Float64, Matrix{Float32}}()
-
-    for Llarge in cfg.Llarge_list
-        tag = _filter_tag(Llarge)
-        subdir = joinpath(cfg.base_out, tag)
-        mkpath(subdir)
-
-        H, _ = instrument_bandpass_L(cfg.n, cfg.m;
-                                     Δx=scales.Δx, Δy=scales.Δy,
-                                     Lcut_small=cfg.Lcut_small,
-                                     Llarge=Llarge,
-                                     fNy=scales.fNy)
-
-        Qf = apply_to_array_xy(Qdata, H; n=cfg.n, m=cfg.m)
-        Uf = apply_to_array_xy(Udata, H; n=cfg.n, m=cfg.m)
-
-        Qslice_filt[Llarge] = Float32.(get_chan_xy(Qf, cfg.ichan, cfg.n, cfg.m))
-        Uslice_filt[Llarge] = Float32.(get_chan_xy(Uf, cfg.ichan, cfg.n, cfg.m))
-
-        write_FITS(joinpath(subdir, "Qnu_filtered.fits"), Qf)
-        write_FITS(joinpath(subdir, "Unu_filtered.fits"), Uf)
-
-        absF, _, _ = RMSynthesis(Qf, Uf, nuArray, PhiArray; log_progress=true)
-        Pmaxf = Pphi_max_map(absF)
-
-        mkpath(joinpath(subdir, "RMSynthesis"))
-        write_FITS(joinpath(subdir, "RMSynthesis", "Pphi_max.fits"), Pmaxf)
-    end
-
-    Pmax0 = read_FITS(cfg.Pmax_nofilter_path)
-
-    Pmax_filt = Dict{Float64, Matrix}()
+    Pmax_filt = Dict{Float64, Matrix{Float32}}()
     L_ok = Float64[]
-    for Llarge in cfg.Llarge_list
-        p = joinpath(cfg.base_out, _filter_tag(Llarge), "RMSynthesis", "Pphi_max.fits")
-        isfile(p) || continue
-        Pmax_filt[Llarge] = read_FITS(p)
+
+    log_progress = _rm_log_progress_enabled()
+
+    for Llarge in Float64.(cfg.Llarge_list)
+        out = _process_single_filter(cfg, scales, nuArray, PhiArray, Qdata, Udata, Llarge; log_progress=log_progress)
+        Qslice_filt[Llarge] = out.Qslice
+        Uslice_filt[Llarge] = out.Uslice
+        Pmax_filt[Llarge] = out.Pmaxf
         push!(L_ok, Llarge)
     end
 
-    @assert !isempty(L_ok) "No filtered Pphi_max.fits found under: $(cfg.base_out)"
+    isempty(L_ok) && error("No filtered Pphi_max.fits products generated under: $(cfg.base_out)")
 
-    return (
-        Qdata=Qdata,
-        Udata=Udata,
-        Qslice_filt=Qslice_filt,
-        Uslice_filt=Uslice_filt,
-        Pmax0=Pmax0,
-        Pmax_filt=Pmax_filt,
-        L_ok=L_ok,
-        scales=scales,
-        axes=axes,
-        nuArray=nuArray,
-        PhiArray=PhiArray,
+    return FilterPassResult(
+        Qdata,
+        Udata,
+        Qslice_filt,
+        Uslice_filt,
+        Pmax0,
+        Pmax_filt,
+        L_ok,
+        scales,
+        axes,
+        Vector{Float64}(nuArray),
+        Vector{Float64}(PhiArray),
     )
 end
 
-function _plot_pmax_maps(cfg::InstrumentalConfig, data)
+"""
+    _plot_pmax_maps(...)
+
+    Plots no-filter vs filtered `Pmax` maps.
+"""
+function _plot_pmax_maps(cfg::InstrumentalConfig, data::FilterPassResult)
     L_ok = data.L_ok
     axes = data.axes
     pmax_colorrange = _robust_colorrange(data.Pmax0, data.Pmax_filt, L_ok)
@@ -165,7 +243,12 @@ function _plot_pmax_maps(cfg::InstrumentalConfig, data)
     end
 end
 
-function _plot_psd_panels(cfg::InstrumentalConfig, data)
+"""
+    _plot_psd_panels(...)
+
+    Plots isotropic PSD panels.
+"""
+function _plot_psd_panels(cfg::InstrumentalConfig, data::FilterPassResult)
     L_ok = data.L_ok
     axes = data.axes
 
@@ -183,12 +266,17 @@ function _plot_psd_panels(cfg::InstrumentalConfig, data)
 
         axpsd0 = Axis(figPSD[1, 1],
             xlabel=LaTeXString("k\\,[\\mathrm{rad\\,pc^{-1}}]"),
-            ylabel=LaTeXString("\\langle |\\tilde{P}|^2 \\rangle(k)"),
+            ylabel=LaTeXString("S_{P}(k)"),
         )
         lines!(axpsd0, kcen0[ok0], Pk0[ok0])
-        set_log_safe!(axpsd0; xdata=kcen0[ok0], ydata=Pk0[ok0])
-        autolimits!(axpsd0)
-        set_pow10_ticks!(axpsd0; which=:both)
+        configure_axis_style!(axpsd0;
+            xdata=kcen0[ok0],
+            ydata=Pk0[ok0],
+            xscale=:log10,
+            yscale=:log10,
+            xminor_subdiv=9,
+            yminor_subdiv=9,
+        )
 
         for (j, Llarge) in enumerate(L_ok)
             kcen, Pk = psd1d_isotropic(data.Pmax_filt[Llarge], axes.kx, axes.ky; nbins=nbins_psd, kmin=kmin_plot, kmax=kmax_plot)
@@ -200,16 +288,26 @@ function _plot_psd_panels(cfg::InstrumentalConfig, data)
                 yticklabelsvisible=false,
             )
             lines!(axpsd, kcen[ok], Pk[ok])
-            set_log_safe!(axpsd; xdata=kcen[ok], ydata=Pk[ok])
-            autolimits!(axpsd)
-            set_pow10_ticks!(axpsd; which=:both)
+            configure_axis_style!(axpsd;
+                xdata=kcen[ok],
+                ydata=Pk[ok],
+                xscale=:log10,
+                yscale=:log10,
+                xminor_subdiv=9,
+                yminor_subdiv=9,
+            )
         end
 
         display(figPSD)
     end
 end
 
-function _plot_pmax_kx(cfg::InstrumentalConfig, data)
+"""
+    _plot_pmax_kx(...)
+
+    Plots `Pmax` spectra along `kx` with peak inset.
+"""
+function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
     Lsorted = sort(data.L_ok)
     series = _collect_series(data.Pmax0, Dict(k => data.Pmax_filt[k] for k in Lsorted), data.axes.kx, Lsorted)
 
@@ -219,7 +317,7 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data)
         figS = Figure(size=(1500, 1200), figure_padding=30)
         axS = Axis(figS[1, 1],
             xlabel=LaTeXString("k_x\\,[\\mathrm{rad\\,pc^{-1}}]"),
-            ylabel=LaTeXString("\\langle |\\tilde{P}(k_x, y)|^2 \\rangle_y"),
+            ylabel=LaTeXString("S_{P}(k_x)"),
         )
 
         plot_multi_spectrum!(axS, series; add_verticals=true, Llist_pc=cfg.Llarge_list)
@@ -248,15 +346,10 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data)
                 height=Relative(0.34),
                 halign=:left,
                 valign=:bottom,
-                xlabel=LaTeXString("L_{\\mathrm{large}}"),
-                ylabel=LaTeXString("k_{\\mathrm{x,peak}}"),
-                xminorticksvisible=false,
-                yminorticksvisible=true,
-                yminorticks=IntervalsBetween(9),
-                yminorticksize=5,
-                yminortickwidth=1.5,
-                xlabelsize=25,
-                ylabelsize=25,
+                xlabel=LaTeXString("L_{\\mathrm{large}}\\,[\\mathrm{pc}]"),
+                ylabel=LaTeXString("k_{x,\\mathrm{peak}}"),
+                xlabelsize=36,
+                ylabelsize=36,
                 xticksize=8,
                 yticksize=8,
                 xtickwidth=2,
@@ -265,8 +358,6 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data)
                 yticklabelsize=22,
                 xtickalign=1,
                 ytickalign=1,
-                xaxisposition=:top,
-                yaxisposition=:right,
             )
 
             lines!(axInset, Leff[ok], kpeak[ok], color=:black, linewidth=2)
@@ -275,11 +366,19 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data)
 
             ymin = max(minimum(kpeak[ok]) * 0.9, eps(Float64))
             ymax = maximum(kpeak[ok]) * 1.1
-            axInset.yscale = linear
+            configure_axis_style!(axInset;
+                xdata=Leff[ok],
+                ydata=kpeak[ok],
+                xscale=:linear,
+                yscale=:linear,
+                xminor_subdiv=0,
+                yminor_subdiv=0,
+                xaxisposition=:top,
+                yaxisposition=:right,
+                x_linear_digits=1,
+                y_linear_digits=3,
+            )
             ylims!(axInset, ymin, ymax)
-
-            axInset.xtickformat = (vs) -> [LaTeXString("\\mathrm{$(round(v; digits=1))}") for v in vs]
-            set_pow10_ticks!(axInset; which=:y)
             axInset.backgroundcolor = (:white, 0.85)
         end
 
@@ -287,9 +386,14 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data)
     end
 end
 
+"""
+    _plot_component_spectrum(...)
+
+    Generic component-spectrum plotting routine.
+"""
 function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
                                   no_filter_img::AbstractMatrix,
-                                  filtered_imgs::Dict{Float64, Matrix},
+                                  filtered_imgs::AbstractDict{<:Real, <:AbstractMatrix},
                                   ylabel::LaTeXString;
                                   add_verticals::Bool=true,
                                   peak_window::Union{Nothing, Tuple{Real, Real}}=nothing,
@@ -334,15 +438,10 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
                 height=Relative(0.34),
                 halign=:left,
                 valign=:bottom,
-                xlabel=LaTeXString("L_{\\mathrm{large}}"),
-                ylabel=LaTeXString("k_{\\mathrm{x,peak}}"),
-                xminorticksvisible=false,
-                yminorticksvisible=true,
-                yminorticks=IntervalsBetween(9),
-                yminorticksize=5,
-                yminortickwidth=1.5,
-                xlabelsize=25,
-                ylabelsize=25,
+                xlabel=LaTeXString("L_{\\mathrm{large}}\\,[\\mathrm{pc}]"),
+                ylabel=LaTeXString("k_{x,\\mathrm{peak}}"),
+                xlabelsize=36,
+                ylabelsize=36,
                 xticksize=8,
                 yticksize=8,
                 xtickwidth=2,
@@ -351,8 +450,6 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
                 yticklabelsize=22,
                 xtickalign=1,
                 ytickalign=1,
-                xaxisposition=:top,
-                yaxisposition=:right,
             )
 
             lines!(axInset, Leff[ok], kpeak[ok], color=:black, linewidth=2)
@@ -360,9 +457,19 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
             xlims!(axInset, 0, 40)
             ymin = max(minimum(kpeak[ok]) * 0.9, eps(Float64))
             ymax = maximum(kpeak[ok]) * 1.1
+            configure_axis_style!(axInset;
+                xdata=Leff[ok],
+                ydata=kpeak[ok],
+                xscale=:linear,
+                yscale=:linear,
+                xminor_subdiv=0,
+                yminor_subdiv=0,
+                xaxisposition=:top,
+                yaxisposition=:right,
+                x_linear_digits=1,
+                y_linear_digits=3,
+            )
             ylims!(axInset, ymin, ymax)
-            axInset.xtickformat = (vs) -> [LaTeXString("\\mathrm{$(round(v; digits=1))}") for v in vs]
-            set_pow10_ticks!(axInset; which=:y)
             axInset.backgroundcolor = (:white, 0.85)
         end
 
@@ -370,9 +477,16 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
     end
 end
 
+"""
+    _build_filtered_dict_from_slice(...)
+
+    Builds per-filter dictionary from a 2D slice.
+"""
 function _build_filtered_dict_from_slice(slice0::AbstractMatrix, cfg::InstrumentalConfig, scales)
-    out = Dict{Float64, Matrix}()
-    for Llarge in cfg.Llarge_list
+    size(slice0) == (cfg.n, cfg.m) || error("Input slice must have size ($(cfg.n),$(cfg.m)), got $(size(slice0))")
+
+    out = Dict{Float64, Matrix{Float64}}()
+    for Llarge in Float64.(cfg.Llarge_list)
         H, _ = instrument_bandpass_L(cfg.n, cfg.m;
                                      Δx=scales.Δx,
                                      Δy=scales.Δy,
@@ -384,51 +498,79 @@ function _build_filtered_dict_from_slice(slice0::AbstractMatrix, cfg::Instrument
     return out
 end
 
-function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags())
+"""
+    _validate_phi_cubes(...)
+
+    Validates `Qphi/Uphi` cubes against phi axis and configured grid.
+"""
+function _validate_phi_cubes(cfg::InstrumentalConfig, data::FilterPassResult, Qphi_cube, Uphi_cube)
+    nϕ = length(data.PhiArray)
+    nϕ > 0 || error("Phi axis is empty")
+    require_channel_index(cfg.iphi, nϕ, "iphi")
+
+    q_layout = require_stokes_cube_layout(Qphi_cube, "realFDF", cfg, nϕ)
+    u_layout = require_stokes_cube_layout(Uphi_cube, "imagFDF", cfg, nϕ)
+    q_layout == u_layout || error("realFDF/imagFDF layout mismatch: realFDF frequency axis dim=$q_layout, imagFDF frequency axis dim=$u_layout")
+
+    return true
+end
+
+"""
+    run_pipeline(...)
+
+    Orchestrates full instrumental-effect pipeline.
+"""
+function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_step::Function=(_ -> nothing))
+    on_step(:filter_pass)
     data = run_filter_pass(cfg)
 
     if flags.run_pmax_maps
+        on_step(:run_pmax_maps)
         _plot_pmax_maps(cfg, data)
     end
 
     if flags.run_psd
+        on_step(:run_psd)
         _plot_psd_panels(cfg, data)
         _plot_pmax_kx(cfg, data)
     end
 
     if flags.run_q_u_p_q2
+        on_step(:run_q_u_p_q2)
         Qslice0 = get_chan_xy(data.Qdata, cfg.ichan, cfg.n, cfg.m)
         Uslice0 = get_chan_xy(data.Udata, cfg.ichan, cfg.n, cfg.m)
 
-        q_filt = Dict{Float64, Matrix}(k => Matrix{Float64}(data.Qslice_filt[k]) for k in keys(data.Qslice_filt))
-        u_filt = Dict{Float64, Matrix}(k => Matrix{Float64}(data.Uslice_filt[k]) for k in keys(data.Uslice_filt))
+        q_filt = Dict{Float64, Matrix{Float64}}(k => Matrix{Float64}(data.Qslice_filt[k]) for k in keys(data.Qslice_filt))
+        u_filt = Dict{Float64, Matrix{Float64}}(k => Matrix{Float64}(data.Uslice_filt[k]) for k in keys(data.Uslice_filt))
 
         _plot_component_spectrum(cfg, data.axes.kx, Qslice0, q_filt,
-            LaTeXString("\\langle |\\tilde{Q}(k_x, y;\\nu_{50})|^2 \\rangle_y"); add_verticals=true)
+            LaTeXString("S_{Q}(k_x;\\nu_{50})"); add_verticals=true)
 
         _plot_component_spectrum(cfg, data.axes.kx, Uslice0, u_filt,
-            LaTeXString("\\langle |\\tilde{U}(k_x, y;\\nu_{50})|^2 \\rangle_y"); add_verticals=true)
+            LaTeXString("S_{U}(k_x;\\nu_{50})"); add_verticals=true)
 
         p_no = sqrt.(Qslice0.^2 .+ Uslice0.^2)
-        p_filt = Dict{Float64, Matrix}()
+        p_filt = Dict{Float64, Matrix{Float64}}()
         for Llarge in sort(data.L_ok)
             p_filt[Llarge] = sqrt.(Float64.(data.Qslice_filt[Llarge]).^2 .+ Float64.(data.Uslice_filt[Llarge]).^2)
         end
         _plot_component_spectrum(cfg, data.axes.kx, p_no, p_filt,
-            LaTeXString("\\langle |\\tilde{P}(k_x, y;\\nu_{50})|^2 \\rangle_y");
+            LaTeXString("S_{P}(k_x;\\nu_{50})");
             add_verticals=false,
             peak_window=(0.12, Inf),
             inset_title=:Pnu)
 
         q2_no = Qslice0 .^ 2
-        q2_filt = Dict{Float64, Matrix}(k => Float64.(data.Qslice_filt[k]).^2 for k in keys(data.Qslice_filt))
+        q2_filt = Dict{Float64, Matrix{Float64}}(k => Float64.(data.Qslice_filt[k]).^2 for k in keys(data.Qslice_filt))
         _plot_component_spectrum(cfg, data.axes.kx, q2_no, q2_filt,
-            LaTeXString("\\left\\langle \\left|\\tilde{Q^2}(k_x,y;\\nu_{50})\\right|^2 \\right\\rangle_y"); add_verticals=true)
+            LaTeXString("S_{Q^{2}}(k_x;\\nu_{50})"); add_verticals=true)
     end
 
     if flags.run_phi_q_u_p
+        on_step(:run_phi_q_u_p)
         Qphi_cube = read_FITS(cfg.Q_in_phi)
         Uphi_cube = read_FITS(cfg.U_in_phi)
+        _validate_phi_cubes(cfg, data, Qphi_cube, Uphi_cube)
 
         ϕval = data.PhiArray[cfg.iphi]
         @info "Phi channel" cfg.iphi ϕval
@@ -439,23 +581,24 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags())
 
         Qφf = _build_filtered_dict_from_slice(Qφ0, cfg, data.scales)
         Uφf = _build_filtered_dict_from_slice(Uφ0, cfg, data.scales)
-        Pφf = Dict{Float64, Matrix}(k => sqrt.(Qφf[k].^2 .+ Uφf[k].^2) for k in keys(Qφf))
+        Pφf = Dict{Float64, Matrix{Float64}}(k => sqrt.(Qφf[k].^2 .+ Uφf[k].^2) for k in keys(Qφf))
 
         _plot_component_spectrum(cfg, data.axes.kx, Qφ0, Qφf,
-            LaTeXString("\\langle |\\tilde{Q}_{\\phi}(k_x,y)|^2 \\rangle_y"); add_verticals=true)
+            LaTeXString("S_{Q_{\\phi}}(k_x)"); add_verticals=true)
 
         _plot_component_spectrum(cfg, data.axes.kx, Uφ0, Uφf,
-            LaTeXString("\\langle |\\tilde{U}_{\\phi}(k_x,y)|^2 \\rangle_y"); add_verticals=true)
+            LaTeXString("S_{U_{\\phi}}(k_x)"); add_verticals=true)
 
         _plot_component_spectrum(cfg, data.axes.kx, Pφ0, Pφf,
-            LaTeXString("\\langle |\\tilde{P}_{\\phi}(k_x,y)|^2 \\rangle_y");
+            LaTeXString("S_{P_{\\phi}}(k_x)");
             add_verticals=false,
             peak_window=(0.12, Inf),
             inset_title=:Pphi)
     end
 
     if flags.run_lic
-        @info "LIC section requested, but default pipeline keeps it disabled as in original script comments."
+        on_step(:run_lic)
+        @debug "LIC section requested, but default pipeline keeps it disabled as in original script comments."
     end
 
     return data

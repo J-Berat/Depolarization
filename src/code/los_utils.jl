@@ -1,5 +1,10 @@
 using Statistics
 
+"""
+    los_config(...)
+
+    Returns LOS field name and a closure for 1D profile extraction.
+"""
 function los_config(los::String)
     if los == "x"
         return ("Bx", (i, j, B) -> Array(@view B[:, i, j]))
@@ -12,6 +17,11 @@ function los_config(los::String)
     end
 end
 
+"""
+    smooth_moving_average(...)
+
+    Moving-average smoothing with odd window enforcement.
+"""
 function smooth_moving_average(x::AbstractVector, w::Int)
     w = max(w, 1)
     w = isodd(w) ? w : (w + 1)
@@ -29,6 +39,11 @@ function smooth_moving_average(x::AbstractVector, w::Int)
     return y
 end
 
+"""
+    sign_eps(...)
+
+    Robust sign function with dead zone `[-eps,+eps]`.
+"""
 @inline function sign_eps(x::Real; eps::Real=0.0)
     if x > eps
         return 1
@@ -39,6 +54,11 @@ end
     end
 end
 
+"""
+    reversal_indices(...)
+
+    Detects sign-reversal indices in a profile.
+"""
 function reversal_indices(B::AbstractVector; eps::Real=0.0)
     idx = Int[]
     @inbounds for k in 1:(length(B)-1)

@@ -1,0 +1,11 @@
+# macOS Finder metadata
+.DS_Store
+
+# Local analysis artifacts
+outputs/
+.Rhistory
+
+# Local Julia depot/cache if created in-repo
+.julia/
+compiled/
+*.ji

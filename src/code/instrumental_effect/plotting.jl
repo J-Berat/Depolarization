@@ -1,6 +1,28 @@
+"""
+    cb_latex_ticks(...)
+
+    Formats colorbar ticks as LaTeX strings.
+"""
 cb_latex_ticks(vs) = [LaTeXString("\\mathrm{" * Printf.format(Printf.Format("%.2g"), v) * "}") for v in vs]
+"""
+    pow10_label_from_val(...)
+
+    Formats values as `10^n` labels.
+"""
 pow10_label_from_val(v::Real) = LaTeXString("10^{$(round(Int, log10(v)))}")
 
+"""
+    latex_linear_tickformat(...)
+
+    Formats linear ticks as LaTeX strings.
+"""
+latex_linear_tickformat(vs; digits::Int=2) = [LaTeXString("\\mathrm{$(round(v; digits=digits))}") for v in vs]
+
+"""
+    set_latex_linear_ticks_pc!(...)
+
+    Configures linear parsec ticks in LaTeX format.
+"""
 function set_latex_linear_ticks_pc!(ax::Axis; step_pc::Real=10.0, Lbox_pc::Real=50.0)
     vals = collect(0.0:step_pc:Lbox_pc)
     ax.xticks = vals
@@ -10,6 +32,11 @@ function set_latex_linear_ticks_pc!(ax::Axis; step_pc::Real=10.0, Lbox_pc::Real=
     return nothing
 end
 
+"""
+    set_pow10_ticks!(...)
+
+    Configures power-of-10 ticks on log axes.
+"""
 function set_pow10_ticks!(ax::Axis; which::Symbol=:both)
     r = ax.finallimits[]
     xmin = r.origin[1]
@@ -23,6 +50,8 @@ function set_pow10_ticks!(ax::Axis; which::Symbol=:both)
         vals = 10.0 .^ collect(emin:emax)
         ax.xticks = vals
         ax.xtickformat = (vs) -> [pow10_label_from_val(v) for v in vs]
+        ax.xminorticksvisible = true
+        ax.xminorticks = IntervalsBetween(9)
     end
 
     if (which == :y || which == :both) && ymin > 0 && ymax > 0
@@ -31,10 +60,17 @@ function set_pow10_ticks!(ax::Axis; which::Symbol=:both)
         vals = 10.0 .^ collect(emin:emax)
         ax.yticks = vals
         ax.ytickformat = (vs) -> [pow10_label_from_val(v) for v in vs]
+        ax.yminorticksvisible = true
+        ax.yminorticks = IntervalsBetween(9)
     end
     return nothing
 end
 
+"""
+    set_log_safe!(...)
+
+    Safely enables log scaling with positive finite limits.
+"""
 function set_log_safe!(ax::Axis; xdata::AbstractVector, ydata::AbstractVector, pad_frac::Real=0.08)
     xok = isfinite.(xdata) .& (xdata .> 0)
     yok = isfinite.(ydata) .& (ydata .> 0)
@@ -58,12 +94,91 @@ function set_log_safe!(ax::Axis; xdata::AbstractVector, ydata::AbstractVector, p
     return nothing
 end
 
+"""
+    set_linear_safe!(...)
+
+    Safely enables linear scaling with finite limits.
+"""
+function set_linear_safe!(ax::Axis; xdata::AbstractVector, ydata::AbstractVector, pad_frac::Real=0.08)
+    xok = isfinite.(xdata)
+    yok = isfinite.(ydata)
+    @assert any(xok) "No finite x data for linear axis"
+    @assert any(yok) "No finite y data for linear axis"
+
+    xmin = minimum(xdata[xok])
+    xmax = maximum(xdata[xok])
+    ymin = minimum(ydata[yok])
+    ymax = maximum(ydata[yok])
+
+    dx = max(xmax - xmin, eps(Float64))
+    dy = max(ymax - ymin, eps(Float64))
+
+    ax.xscale = identity
+    ax.yscale = identity
+    xlims!(ax, xmin - pad_frac * dx, xmax + pad_frac * dx)
+    ylims!(ax, ymin - pad_frac * dy, ymax + pad_frac * dy)
+    return nothing
+end
+
+"""
+    configure_axis_style!(...)
+
+    Unified axis styling for spectra and insets.
+"""
+function configure_axis_style!(ax::Axis; xdata::AbstractVector, ydata::AbstractVector,
+                               xscale::Symbol=:log10, yscale::Symbol=:log10,
+                               xminor_subdiv::Int=9, yminor_subdiv::Int=9,
+                               xaxisposition::Symbol=:bottom, yaxisposition::Symbol=:left,
+                               x_linear_digits::Int=2, y_linear_digits::Int=2)
+    ax.xaxisposition = xaxisposition
+    ax.yaxisposition = yaxisposition
+
+    ax.xminorticksvisible = xminor_subdiv > 0
+    ax.yminorticksvisible = yminor_subdiv > 0
+    if xminor_subdiv > 0
+        ax.xminorticks = IntervalsBetween(xminor_subdiv)
+    end
+    if yminor_subdiv > 0
+        ax.yminorticks = IntervalsBetween(yminor_subdiv)
+    end
+
+    if xscale == :log10 || yscale == :log10
+        set_log_safe!(ax; xdata=xdata, ydata=ydata)
+        autolimits!(ax)
+        if xscale == :log10 && yscale == :log10
+            set_pow10_ticks!(ax; which=:both)
+        elseif xscale == :log10
+            set_pow10_ticks!(ax; which=:x)
+            ax.ytickformat = (vs) -> latex_linear_tickformat(vs; digits=y_linear_digits)
+        else
+            set_pow10_ticks!(ax; which=:y)
+            ax.xtickformat = (vs) -> latex_linear_tickformat(vs; digits=x_linear_digits)
+        end
+    else
+        set_linear_safe!(ax; xdata=xdata, ydata=ydata)
+        autolimits!(ax)
+        ax.xtickformat = (vs) -> latex_linear_tickformat(vs; digits=x_linear_digits)
+        ax.ytickformat = (vs) -> latex_linear_tickformat(vs; digits=y_linear_digits)
+    end
+    return nothing
+end
+
+"""
+    add_filter_verticals_kx!(...)
+
+    Adds vertical lines for filter scales.
+"""
 function add_filter_verticals_kx!(ax; Llist_pc::AbstractVector, linestyle=:dash)
     ks = (2π) ./ Float64.(Llist_pc)
     vlines!(ax, ks; linestyle=linestyle, color=:black)
     return nothing
 end
 
+"""
+    add_peak_vline!(...)
+
+    Adds vertical line at detected peak.
+"""
 function add_peak_vline!(ax, k::AbstractVector, y::AbstractVector;
                          kmin::Real=0.0, kmax::Real=Inf,
                          color=:black, linestyle=:dot, linewidth=4.5)
@@ -74,6 +189,11 @@ function add_peak_vline!(ax, k::AbstractVector, y::AbstractVector;
     return kp
 end
 
+"""
+    curve_colors(...)
+
+    Returns discrete plotting color palette.
+"""
 function curve_colors(n::Int)
     base = [
         :black,
@@ -90,6 +210,11 @@ function curve_colors(n::Int)
     return base[1:n]
 end
 
+"""
+    set_theme_heatmaps!(...)
+
+    Applies heatmap plotting theme.
+"""
 function set_theme_heatmaps!()
     set_theme!(Theme(
         fontsize=44,
@@ -114,6 +239,11 @@ function set_theme_heatmaps!()
     ))
 end
 
+"""
+    set_theme_spectra!(...)
+
+    Applies spectra plotting theme.
+"""
 function set_theme_spectra!()
     set_theme!(Theme(
         fontsize=44,
@@ -149,7 +279,11 @@ function set_theme_spectra!()
     ))
 end
 
-"""Build and plot multiple 1D spectra sharing the same layout and styling."""
+"""
+    plot_multi_spectrum!(...)
+
+    Plots multiple spectra with legend and optional peak/vertical annotations.
+"""
 function plot_multi_spectrum!(ax::Axis, series;
                               add_verticals::Bool=false,
                               Llist_pc::AbstractVector=Float64[],
@@ -160,11 +294,24 @@ function plot_multi_spectrum!(ax::Axis, series;
     ally = Float64[]
 
     for s in series
+        append!(allx, s.kx[s.ok])
+        append!(ally, s.Pk[s.ok])
+    end
+
+    if peak_window !== nothing && !isempty(allx)
+        kmin, kmax = peak_window
+        xhi = isfinite(kmax) ? float(kmax) : maximum(allx)
+        xlo = float(kmin)
+        if isfinite(xlo) && isfinite(xhi) && xhi > xlo
+            # Highlight peak-search window.
+            vspan!(ax, xlo, xhi; color=(:lightgray, 0.30))
+        end
+    end
+
+    for s in series
         li = lines!(ax, s.kx[s.ok], s.Pk[s.ok], color=s.color, linewidth=3)
         push!(handles, li)
         push!(labels, s.label)
-        append!(allx, s.kx[s.ok])
-        append!(ally, s.Pk[s.ok])
 
         if peak_window !== nothing
             kmin, kmax = peak_window
@@ -177,9 +324,16 @@ function plot_multi_spectrum!(ax::Axis, series;
     end
 
     axislegend(ax, handles, labels; position=:rt, framevisible=true)
-    set_log_safe!(ax; xdata=allx, ydata=ally)
-    autolimits!(ax)
-    set_pow10_ticks!(ax; which=:both)
+    configure_axis_style!(ax;
+        xdata=allx,
+        ydata=ally,
+        xscale=:log10,
+        yscale=:log10,
+        xminor_subdiv=9,
+        yminor_subdiv=9,
+        xaxisposition=:bottom,
+        yaxisposition=:left,
+    )
 
     return (allx=allx, ally=ally)
 end
