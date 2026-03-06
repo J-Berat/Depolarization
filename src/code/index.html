@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Code local — style arrondi + logo</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f5f5f5; margin:0; padding:40px 0; }
+    .wrap { width: min(980px, 92vw); margin: 0 auto; display:grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .card { background:#fff; border-radius:14px; padding:18px; box-shadow:0 10px 25px rgba(0,0,0,.10); }
+    h2 { margin:0 0 14px; }
+    label { display:block; font-weight:700; margin: 10px 0 6px; }
+    input[type="text"] { width:100%; padding:12px; border:1px solid #ddd; border-radius:10px; font-size:15px; }
+    .row { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+    button {
+      background:#2b7cff; color:#fff; border:none; padding:12px 16px;
+      border-radius:10px; cursor:pointer; font-size:15px;
+    }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .drop {
+      border:2px dashed #bbb; border-radius:12px; padding:18px; text-align:center;
+      color:#666; transition:.15s; user-select:none;
+    }
+    .drop.drag { border-color:#2b7cff; color:#2b7cff; background:#f0f6ff; }
+    .muted { color:#777; font-size:13px; margin-top:8px; }
+    .logo-line { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-top:10px; }
+    .badge { font-size:12px; color:#333; background:#eee; padding:4px 8px; border-radius:999px; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .previewBox { display:flex; align-items:center; justify-content:center; min-height:380px; border-radius:12px; background:#fafafa; border:1px solid #eee; }
+    img { max-width: 380px; max-height: 380px; image-rendering: pixelated; }
+    .controls { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .control {
+      border:1px solid #eee; border-radius:12px; padding:12px; background:#fafafa;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .control span { font-size:13px; color:#333; font-weight:700; }
+    .toggle { display:flex; align-items:center; gap:8px; }
+    @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } .previewBox { min-height: 320px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2>Générer un QR code</h2>
+
+      <label for="url">Lien</label>
+      <input id="url" type="text" placeholder="https://example.com" />
+
+      <div class="controls" style="margin-top:12px;">
+        <div class="control">
+          <span>Couleur QR</span>
+          <input id="fg" type="color" value="#000000" />
+        </div>
+        <div class="control">
+          <span>Fond</span>
+          <input id="bg" type="color" value="#ffffff" />
+        </div>
+        <div class="control" style="grid-column:1 / -1;">
+          <span>Style “dots” (coins arrondis)</span>
+          <div class="toggle">
+            <input id="rounded" type="checkbox" checked />
+            <label for="rounded" style="margin:0; font-weight:400;">Activer</label>
+          </div>
+        </div>
+      </div>
+
+      <label style="margin-top:14px;">Logo (optionnel)</label>
+      <div id="drop" class="drop">
+        Glisse-dépose une image ici<br/>
+        <span class="muted">ou clique pour choisir (PNG transparent recommandé)</span>
+      </div>
+      <input id="logoInput" type="file" accept="image/*" style="display:none" />
+
+      <div class="logo-line">
+        <span id="logoName" class="badge">Aucun logo</span>
+        <button id="clearLogo" type="button">Retirer le logo</button>
+      </div>
+
+      <div class="row">
+        <button id="btnPreview" type="button">Mettre à jour l’aperçu</button>
+        <button id="btnDownload" type="button" disabled>Télécharger PNG</button>
+      </div>
+
+      <p class="muted">
+        Conseil : garde un bon contraste (QR sombre sur fond clair).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Aperçu</h2>
+      <div class="previewBox">
+        <img id="previewImg" alt="Aperçu du QR code" style="display:none" />
+        <div id="previewPlaceholder" class="muted">Entre un lien puis “Mettre à jour l’aperçu”.</div>
+      </div>
+      <p id="status" class="muted"></p>
+    </div>
+  </div>
+
+<script>
+  const urlEl = document.getElementById("url");
+  const dropEl = document.getElementById("drop");
+  const logoInput = document.getElementById("logoInput");
+  const logoName = document.getElementById("logoName");
+  const clearLogoBtn = document.getElementById("clearLogo");
+  const btnPreview = document.getElementById("btnPreview");
+  const btnDownload = document.getElementById("btnDownload");
+  const previewImg = document.getElementById("previewImg");
+  const previewPlaceholder = document.getElementById("previewPlaceholder");
+  const statusEl = document.getElementById("status");
+
+  const fgEl = document.getElementById("fg");
+  const bgEl = document.getElementById("bg");
+  const roundedEl = document.getElementById("rounded");
+
+  let logoFile = null;
+
+  function setStatus(msg) { statusEl.textContent = msg || ""; }
+
+  function setLogo(file) {
+    logoFile = file;
+    logoName.textContent = file ? file.name : "Aucun logo";
+  }
+
+  function buildFormData() {
+    const url = urlEl.value.trim();
+    const fd = new FormData();
+    fd.append("url", url);
+    fd.append("fg", fgEl.value);
+    fd.append("bg", bgEl.value);
+    fd.append("rounded", roundedEl.checked ? "true" : "false");
+    if (logoFile) fd.append("logo", logoFile, logoFile.name);
+    return { url, fd };
+  }
+
+  async function updatePreview() {
+    const { url, fd } = buildFormData();
+    if (!url) {
+      setStatus("❌ Mets un lien d’abord.");
+      return;
+    }
+
+    btnPreview.disabled = true;
+    btnDownload.disabled = true;
+    setStatus("⏳ Génération…");
+
+    try {
+      const res = await fetch("/preview", { method: "POST", body: fd });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setStatus("❌ " + (data.error || "Erreur"));
+        return;
+      }
+
+      previewImg.src = "data:image/png;base64," + data.png_base64;
+      previewImg.style.display = "block";
+      previewPlaceholder.style.display = "none";
+      btnDownload.disabled = false;
+      setStatus("✅ Aperçu mis à jour.");
+    } catch (e) {
+      setStatus("❌ Erreur réseau : " + e);
+    } finally {
+      btnPreview.disabled = false;
+    }
+  }
+
+  async function downloadQR() {
+    const { url, fd } = buildFormData();
+    if (!url) return;
+
+    btnDownload.disabled = true;
+    setStatus("⏳ Préparation du téléchargement…");
+
+    try {
+      const res = await fetch("/download", { method: "POST", body: fd });
+      if (!res.ok) {
+        setStatus("❌ Erreur pendant le téléchargement.");
+        btnDownload.disabled = false;
+        return;
+      }
+
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      const objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
+      a.download = "qr_code.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      setStatus("✅ Téléchargé : qr_code.png");
+    } catch (e) {
+      setStatus("❌ Erreur réseau : " + e);
+      btnDownload.disabled = false;
+    }
+  }
+
+  // Drag & Drop
+  dropEl.addEventListener("click", () => logoInput.click());
+
+  ["dragenter","dragover"].forEach(evt => {
+    dropEl.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropEl.classList.add("drag");
+    });
+  });
+
+  ["dragleave","drop"].forEach(evt => {
+    dropEl.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropEl.classList.remove("drag");
+    });
+  });
+
+  dropEl.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) {
+      setLogo(file);
+      setStatus("Logo chargé. Mets à jour l’aperçu.");
+    } else {
+      setStatus("❌ Dépose une image (PNG/JPG/WebP…).");
+    }
+  });
+
+  logoInput.addEventListener("change", () => {
+    const file = logoInput.files && logoInput.files[0];
+    if (file) setLogo(file);
+    setStatus(file ? "Logo chargé. Mets à jour l’aperçu." : "");
+  });
+
+  clearLogoBtn.addEventListener("click", () => {
+    setLogo(null);
+    logoInput.value = "";
+    setStatus("Logo retiré. Mets à jour l’aperçu.");
+  });
+
+  // Actions
+  btnPreview.addEventListener("click", updatePreview);
+  btnDownload.addEventListener("click", downloadQR);
+
+  // UX: Enter = preview
+  urlEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") updatePreview();
+  });
+
+  // Optionnel: auto-refresh quand on change couleur/style (décommenter si tu veux)
+  // [fgEl, bgEl, roundedEl].forEach(el => el.addEventListener("change", updatePreview));
+</script>
+</body>
+</html>
