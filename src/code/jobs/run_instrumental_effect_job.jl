@@ -45,7 +45,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         Pmax_nofilter_path = pmax_in,
         Q_in_phi = q_phi,
         U_in_phi = u_phi,
-        base_out = standard_output_dir(cfg, "instrumental_effect"; simu=sim, los=los),
+        base_out = standard_output_dir(cfg, "instrumental"; simu=sim, los=los),
         Bx_in = bx_in,
         By_in = by_in,
         Bz_in = bz_in,
@@ -63,7 +63,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
     run_pipeline(run_cfg; flags=flags)
 
     return Dict(
-        "task" => "instrumental_effect",
+        "task" => "instrumental",
         "output_dir" => run_cfg.base_out,
         "flags" => Dict(
             "run_pmax_maps" => flags.run_pmax_maps,
@@ -76,5 +76,5 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_job_entrypoint("instrumental_effect", run_instrumental_effect_job)
+    run_job_entrypoint("instrumental", run_instrumental_effect_job)
 end

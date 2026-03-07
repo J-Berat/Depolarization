@@ -52,7 +52,7 @@ end
 function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
     enabled = task_enabled(cfg, ["tasks", "segmentation_pipeline_job", "enabled"]; default=true)
     if !enabled
-        return skipped_job_result("segmentation_pipeline_job", "disabled by tasks.segmentation_pipeline_job.enabled")
+        return skipped_job_result("segmentation", "disabled by tasks.segmentation_pipeline_job.enabled")
     end
 
     sim_root = resolve_simulations_root(cfg)
@@ -182,7 +182,7 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
     end
 
     return Dict(
-        "task" => "segmentation_pipeline_job",
+        "task" => "segmentation",
         "chunk_dir" => chunk_out,
         "cut_dir" => cut_out,
         "intervals_csv" => intervals_csv,
@@ -193,5 +193,5 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_job_entrypoint("segmentation_pipeline_job", run_segmentation_pipeline_job)
+    run_job_entrypoint("segmentation", run_segmentation_pipeline_job)
 end

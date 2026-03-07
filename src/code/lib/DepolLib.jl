@@ -21,6 +21,9 @@ export DEFAULT_CONFIG_PATH,
        run_script_with_same_config, default_simulation_list
 
 const DEFAULT_CONFIG_PATH = normpath(joinpath(@__DIR__, "..", "..", "..", "config", "default.toml"))
+const OUTPUTS_ROOT_DEFAULT = joinpath(homedir(), "Desktop", "depolarization_outputs")
+const _ANNOUNCED_OUTPUT_DIRS = Set{String}()
+const _ANNOUNCED_OUTPUT_PATHS = Set{String}()
 
 """
     _parse_scalar(...)
@@ -462,37 +465,55 @@ end
 """
     normalize_task_name(...)
 
-    Normalizes task names by replacing whitespace with underscores.
+    Normalizes/simplifies task names for output folders and filenames.
 """
-normalize_task_name(task::AbstractString) = replace(task, r"\s+" => "_")
+function normalize_task_name(task::AbstractString)
+    name = lowercase(strip(String(task)))
+    name = replace(name, r"\s+" => "_")
+    name = replace(name, r"^run_" => "")
+    name = replace(name, r"_job(?=_|$)" => "")
+    name = replace(name, r"_suite(?=_|$)" => "")
+    name = replace(name, r"_pipeline(?=_|$)" => "")
+    name = replace(name, r"_+" => "_")
+    return strip(name, '_')
+end
 
 """
     standard_output_dir(...)
 
-    Creates/returns a standard output directory.
+    Creates/returns a standard output directory (Desktop by default).
 """
 function standard_output_dir(cfg::AbstractDict, task::AbstractString; simu=nothing, los=nothing)
-    out_root = string(cfg_require(cfg, ["paths", "outputs_root"]))
+    out_root = string(cfg_get(cfg, ["paths", "desktop_output_root"]; default=OUTPUTS_ROOT_DEFAULT))
     simu_name = simu === nothing ? string(cfg_require(cfg, ["simulation", "name"])) : string(simu)
     los_name = los === nothing ? string(cfg_require(cfg, ["simulation", "los"])) : string(los)
     require_los(los_name)
 
     dir = joinpath(out_root, normalize_task_name(task), simu_name, "LOS$(los_name)")
     mkpath(dir)
+    if !(dir in _ANNOUNCED_OUTPUT_DIRS)
+        push!(_ANNOUNCED_OUTPUT_DIRS, dir)
+        @info "Output directory ready" task=normalize_task_name(task) out_dir=dir
+    end
     return dir
 end
 
 """
     standard_output_path(...)
 
-    Builds a standard output file path.
+    Builds a standard output file path with a short filename (`artifact.ext`).
 """
 function standard_output_path(cfg::AbstractDict, task::AbstractString, artifact::AbstractString, ext::AbstractString; simu=nothing, los=nothing)
     simu_name = simu === nothing ? string(cfg_require(cfg, ["simulation", "name"])) : string(simu)
     los_name = los === nothing ? string(cfg_require(cfg, ["simulation", "los"])) : string(los)
     dir = standard_output_dir(cfg, task; simu=simu_name, los=los_name)
-    fname = string(normalize_task_name(task), "_", simu_name, "_LOS", los_name, "_", artifact, ".", ext)
-    return joinpath(dir, fname)
+    fname = string(replace(String(artifact), r"\s+" => "_"), ".", ext)
+    out = joinpath(dir, fname)
+    if !(out in _ANNOUNCED_OUTPUT_PATHS)
+        push!(_ANNOUNCED_OUTPUT_PATHS, out)
+        @info "Output path prepared" task=normalize_task_name(task) file=out
+    end
+    return out
 end
 
 """

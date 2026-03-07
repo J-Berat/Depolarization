@@ -167,7 +167,7 @@ function run_mach_suite(cfg)::Dict{String,Any}
     end
 
     return Dict(
-        "task" => "mach_suite",
+        "task" => "mach",
         "n_simulations" => length(sims),
         "thresholds" => Dict("y" => pth_y, "x" => pth_x),
         "outputs" => Dict(
@@ -179,5 +179,5 @@ function run_mach_suite(cfg)::Dict{String,Any}
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_job_entrypoint("mach_suite", run_mach_suite)
+    run_job_entrypoint("mach", run_mach_suite)
 end
