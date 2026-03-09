@@ -8,6 +8,20 @@ function _filter_tag(Llarge::Real)
 end
 
 """
+    _save_figure(...)
+
+Saves a figure under `<base_out>/figures`.
+"""
+function _save_figure(cfg::InstrumentalConfig, fig, filename::AbstractString)
+    fig_dir = joinpath(cfg.base_out, "figures")
+    mkpath(fig_dir)
+    out = joinpath(fig_dir, filename)
+    save(out, fig)
+    @info "Saved figure" out
+    return out
+end
+
+"""
     _robust_colorrange(...)
 
     Computes robust map color bounds.
@@ -433,6 +447,7 @@ function _plot_pmax_maps(cfg::InstrumentalConfig, data::FilterPassResult)
             tickformat=cb_latex_ticks,
         )
 
+        _save_figure(cfg, fig, "pmax_maps.png")
         display(fig)
     end
 end
@@ -492,6 +507,7 @@ function _plot_psd_panels(cfg::InstrumentalConfig, data::FilterPassResult)
             )
         end
 
+        _save_figure(cfg, figPSD, "psd_panels.png")
         display(figPSD)
     end
 end
@@ -578,6 +594,7 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
             axInset.backgroundcolor = (:white, 0.85)
         end
 
+        _save_figure(cfg, figS, "pmax_kx.png")
         display(figS)
     end
 end
@@ -593,7 +610,8 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
                                   ylabel::LaTeXString;
                                   add_verticals::Bool=true,
                                   peak_window::Union{Nothing, Tuple{Real, Real}}=nothing,
-                                  inset_title::Union{Nothing, Symbol}=nothing)
+                                  inset_title::Union{Nothing, Symbol}=nothing,
+                                  save_tag::AbstractString="spectrum")
     Lall = sort(collect(keys(filtered_imgs)))
     Ldisplay = _select_display_filters(Lall; n_display=4)
     series = _collect_series(no_filter_img, filtered_imgs, kx, Ldisplay)
@@ -670,6 +688,7 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
             axInset.backgroundcolor = (:white, 0.85)
         end
 
+        _save_figure(cfg, fig, "$(save_tag).png")
         display(fig)
     end
 end
@@ -741,10 +760,10 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         u_filt = copy(data.Uslice_filt)
 
         _plot_component_spectrum(cfg, data.axes.kx, Qslice0, q_filt,
-            LaTeXString("S_{Q}(k_x;\\nu_{50})"); add_verticals=true)
+            LaTeXString("S_{Q}(k_x;\\nu_{50})"); add_verticals=true, save_tag="q_nu50")
 
         _plot_component_spectrum(cfg, data.axes.kx, Uslice0, u_filt,
-            LaTeXString("S_{U}(k_x;\\nu_{50})"); add_verticals=true)
+            LaTeXString("S_{U}(k_x;\\nu_{50})"); add_verticals=true, save_tag="u_nu50")
 
         p_no = sqrt.(Qslice0.^2 .+ Uslice0.^2)
         p_filt = Dict{Float64, Matrix{Float64}}()
@@ -757,12 +776,13 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
             LaTeXString("S_{P}(k_x;\\nu_{50})");
             add_verticals=false,
             peak_window=(0.12, Inf),
-            inset_title=:Pnu)
+            inset_title=:Pnu,
+            save_tag="p_nu50")
 
         q2_no = Qslice0 .^ 2
         q2_filt = Dict{Float64, Matrix{Float64}}(k => Float64.(data.Qslice_filt[k].^2) for k in keys(data.Qslice_filt))
         _plot_component_spectrum(cfg, data.axes.kx, q2_no, q2_filt,
-            LaTeXString("S_{Q^{2}}(k_x;\\nu_{50})"); add_verticals=true)
+            LaTeXString("S_{Q^{2}}(k_x;\\nu_{50})"); add_verticals=true, save_tag="q2_nu50")
     end
 
     if flags.run_phi_q_u_p
@@ -783,16 +803,17 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         Pφf = Dict{Float64, Matrix{Float64}}(k => sqrt.(Qφf[k].^2 .+ Uφf[k].^2) for k in keys(Qφf))
 
         _plot_component_spectrum(cfg, data.axes.kx, Qφ0, Qφf,
-            LaTeXString("S_{Q_{\\phi}}(k_x)"); add_verticals=true)
+            LaTeXString("S_{Q_{\\phi}}(k_x)"); add_verticals=true, save_tag="q_phi")
 
         _plot_component_spectrum(cfg, data.axes.kx, Uφ0, Uφf,
-            LaTeXString("S_{U_{\\phi}}(k_x)"); add_verticals=true)
+            LaTeXString("S_{U_{\\phi}}(k_x)"); add_verticals=true, save_tag="u_phi")
 
         _plot_component_spectrum(cfg, data.axes.kx, Pφ0, Pφf,
             LaTeXString("S_{P_{\\phi}}(k_x)");
             add_verticals=false,
             peak_window=(0.12, Inf),
-            inset_title=:Pphi)
+            inset_title=:Pphi,
+            save_tag="p_phi")
     end
 
     if flags.run_lic
