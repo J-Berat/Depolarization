@@ -447,7 +447,7 @@ function _plot_pmax_maps(cfg::InstrumentalConfig, data::FilterPassResult)
             tickformat=cb_latex_ticks,
         )
 
-        _save_figure(cfg, fig, "pmax_maps.png")
+        _save_figure(cfg, fig, "pmax_maps.pdf")
         display(fig)
     end
 end
@@ -507,7 +507,7 @@ function _plot_psd_panels(cfg::InstrumentalConfig, data::FilterPassResult)
             )
         end
 
-        _save_figure(cfg, figPSD, "psd_panels.png")
+        _save_figure(cfg, figPSD, "psd_panels.pdf")
         display(figPSD)
     end
 end
@@ -573,11 +573,20 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
             )
 
             lines!(axInset, Leff[ok], kpeak[ok], color=:black, linewidth=2)
-            scatter!(axInset, Leff[ok], kpeak[ok]; color=cpeak[ok], markersize=14)
-            xlims!(axInset, 0, 40)
+            scatter!(axInset, Leff[ok], kpeak[ok];
+                color=cpeak[ok],
+                markersize=18,
+                strokecolor=:black,
+                strokewidth=1.5,
+            )
 
-            ymin = max(minimum(kpeak[ok]) * 0.9, eps(Float64))
-            ymax = maximum(kpeak[ok]) * 1.1
+            xlo = minimum(Leff[ok])
+            xhi = maximum(Leff[ok])
+            xpad = max(0.05 * (xhi - xlo), 0.5)
+            xlims!(axInset, max(0.0, xlo - xpad), xhi + xpad)
+
+            ymin = max(minimum(kpeak[ok]) * 0.85, eps(Float64))
+            ymax = maximum(kpeak[ok]) * 1.15
             configure_axis_style!(axInset;
                 xdata=Leff[ok],
                 ydata=kpeak[ok],
@@ -594,7 +603,7 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
             axInset.backgroundcolor = (:white, 0.85)
         end
 
-        _save_figure(cfg, figS, "pmax_kx.png")
+        _save_figure(cfg, figS, "pmax_kx.pdf")
         display(figS)
     end
 end
@@ -668,10 +677,20 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
             )
 
             lines!(axInset, Leff[ok], kpeak[ok], color=:black, linewidth=2)
-            scatter!(axInset, Leff[ok], kpeak[ok]; color=cpeak[ok], markersize=14)
-            xlims!(axInset, 0, 40)
-            ymin = max(minimum(kpeak[ok]) * 0.9, eps(Float64))
-            ymax = maximum(kpeak[ok]) * 1.1
+            scatter!(axInset, Leff[ok], kpeak[ok];
+                color=cpeak[ok],
+                markersize=18,
+                strokecolor=:black,
+                strokewidth=1.5,
+            )
+
+            xlo = minimum(Leff[ok])
+            xhi = maximum(Leff[ok])
+            xpad = max(0.05 * (xhi - xlo), 0.5)
+            xlims!(axInset, max(0.0, xlo - xpad), xhi + xpad)
+
+            ymin = max(minimum(kpeak[ok]) * 0.85, eps(Float64))
+            ymax = maximum(kpeak[ok]) * 1.15
             configure_axis_style!(axInset;
                 xdata=Leff[ok],
                 ydata=kpeak[ok],
@@ -688,7 +707,7 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
             axInset.backgroundcolor = (:white, 0.85)
         end
 
-        _save_figure(cfg, fig, "$(save_tag).png")
+        _save_figure(cfg, fig, "$(save_tag).pdf")
         display(fig)
     end
 end
