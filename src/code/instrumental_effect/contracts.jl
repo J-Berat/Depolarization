@@ -16,7 +16,6 @@ struct FilterPassResult{
     Uslice_filt::Dict{Float64, Matrix{Float32}}
     Pmax0::TP
     Pmax_filt::Dict{Float64, Matrix{Float32}}
-    H_cache::Dict{Float64, Matrix{Float32}}
     L_ok::Vector{Float64}
     scales::TS
     axes::TA

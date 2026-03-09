@@ -27,27 +27,15 @@ end
     Computes robust map color bounds.
 """
 function _robust_colorrange(Pmax0, Pmax_filt::AbstractDict{<:Real, <:AbstractMatrix}, L_ok::Vector{Float64})
-    vals = Float64[]
-    sizehint!(vals, length(Pmax0) * (1 + length(L_ok)))
-
-    for v in Pmax0
-        fv = float(v)
-        isfinite(fv) && push!(vals, fv)
-    end
+    vals = vec(float.(Pmax0))
     for Llarge in L_ok
-        for v in Pmax_filt[Llarge]
-            fv = float(v)
-            isfinite(fv) && push!(vals, fv)
-        end
+        append!(vals, vec(float.(Pmax_filt[Llarge])))
     end
+    vals = vals[isfinite.(vals)]
     isempty(vals) && error("No finite values available to compute color range")
-
-    n = length(vals)
-    ilo = clamp(round(Int, 0.01 * n), 1, n)
-    ihi = clamp(round(Int, 0.99 * n), 1, n)
-    work = copy(vals)
-    lo = partialsort!(work, ilo)
-    hi = (ihi == ilo) ? lo : partialsort!(work, ihi)
+    sort!(vals)
+    lo = vals[clamp(round(Int, 0.01 * length(vals)), 1, length(vals))]
+    hi = vals[clamp(round(Int, 0.99 * length(vals)), 1, length(vals))]
     return (lo, hi)
 end
 
@@ -319,10 +307,16 @@ end
     Computes one filter level and writes filtered outputs.
 """
 function _process_single_filter(cfg::InstrumentalConfig, scales, nuArray, PhiArray,
-                                Qdata, Udata, Llarge::Float64, H::AbstractMatrix; log_progress::Bool)
+                                Qdata, Udata, Llarge::Float64; log_progress::Bool)
     tag = _filter_tag(Llarge)
     subdir = joinpath(cfg.base_out, tag)
     mkpath(subdir)
+
+    H, _ = instrument_bandpass_L(cfg.n, cfg.m;
+                                 Δx=scales.Δx, Δy=scales.Δy,
+                                 Lcut_small=cfg.Lcut_small,
+                                 Llarge=Llarge,
+                                 fNy=scales.fNy)
 
     Qf = apply_to_array_xy(Qdata, H; n=cfg.n, m=cfg.m)
     Uf = apply_to_array_xy(Udata, H; n=cfg.n, m=cfg.m)
@@ -367,42 +361,16 @@ function run_filter_pass(cfg::InstrumentalConfig)
     Qslice_filt = Dict{Float64, Matrix{Float32}}()
     Uslice_filt = Dict{Float64, Matrix{Float32}}()
     Pmax_filt = Dict{Float64, Matrix{Float32}}()
-    L_ok = sort(Float64.(cfg.Llarge_list))
-    H_cache = Dict{Float64, Matrix{Float32}}()
-    for Llarge in L_ok
-        H, _ = instrument_bandpass_L(cfg.n, cfg.m;
-                                     Δx=scales.Δx, Δy=scales.Δy,
-                                     Lcut_small=cfg.Lcut_small,
-                                     Llarge=Llarge,
-                                     fNy=scales.fNy)
-        H_cache[Llarge] = H
-    end
+    L_ok = Float64[]
 
     log_progress = _rm_log_progress_enabled()
-    threaded = Threads.nthreads() > 1 && length(L_ok) > 1
-    per_filter_log_progress = log_progress && !threaded
-    results = Vector{NamedTuple}(undef, length(L_ok))
 
-    if threaded
-        Threads.@threads for idx in eachindex(L_ok)
-            Llarge = L_ok[idx]
-            H = H_cache[Llarge]
-            results[idx] = _process_single_filter(cfg, scales, nuArray, PhiArray, Qdata, Udata, Llarge, H;
-                                                  log_progress=per_filter_log_progress)
-        end
-    else
-        for idx in eachindex(L_ok)
-            Llarge = L_ok[idx]
-            H = H_cache[Llarge]
-            results[idx] = _process_single_filter(cfg, scales, nuArray, PhiArray, Qdata, Udata, Llarge, H;
-                                                  log_progress=per_filter_log_progress)
-        end
-    end
-
-    for out in results
-        Qslice_filt[out.Llarge] = out.Qslice
-        Uslice_filt[out.Llarge] = out.Uslice
-        Pmax_filt[out.Llarge] = out.Pmaxf
+    for Llarge in Float64.(cfg.Llarge_list)
+        out = _process_single_filter(cfg, scales, nuArray, PhiArray, Qdata, Udata, Llarge; log_progress=log_progress)
+        Qslice_filt[Llarge] = out.Qslice
+        Uslice_filt[Llarge] = out.Uslice
+        Pmax_filt[Llarge] = out.Pmaxf
+        push!(L_ok, Llarge)
     end
 
     isempty(L_ok) && error("No filtered Pphi_max.fits products generated under: $(cfg.base_out)")
@@ -414,7 +382,6 @@ function run_filter_pass(cfg::InstrumentalConfig)
         Uslice_filt,
         Pmax0,
         Pmax_filt,
-        H_cache,
         L_ok,
         scales,
         axes,
@@ -551,7 +518,7 @@ end
     Plots `Pmax` spectra along `kx` with peak inset.
 """
 function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
-    Lall = data.L_ok
+    Lall = sort(data.L_ok)
     Ldisplay = _select_display_filters(Lall; n_display=4)
     series = _collect_series(data.Pmax0, Dict(k => data.Pmax_filt[k] for k in Ldisplay), data.axes.kx, Ldisplay)
 
@@ -750,15 +717,17 @@ end
 
     Builds per-filter dictionary from a 2D slice.
 """
-function _build_filtered_dict_from_slice(slice0::AbstractMatrix,
-                                         H_cache::AbstractDict{<:Real, <:AbstractMatrix},
-                                         L_order::AbstractVector{<:Real})
-    firstH = first(values(H_cache))
-    size(slice0) == size(firstH) || error("Input slice must have size $(size(firstH)), got $(size(slice0))")
+function _build_filtered_dict_from_slice(slice0::AbstractMatrix, cfg::InstrumentalConfig, scales)
+    size(slice0) == (cfg.n, cfg.m) || error("Input slice must have size ($(cfg.n),$(cfg.m)), got $(size(slice0))")
 
     out = Dict{Float64, Matrix{Float64}}()
-    for Llarge in Float64.(L_order)
-        H = H_cache[Llarge]
+    for Llarge in Float64.(cfg.Llarge_list)
+        H, _ = instrument_bandpass_L(cfg.n, cfg.m;
+                                     Δx=scales.Δx,
+                                     Δy=scales.Δy,
+                                     Lcut_small=cfg.Lcut_small,
+                                     Llarge=Llarge,
+                                     fNy=scales.fNy)
         out[Llarge] = apply_instrument_2d(slice0, H)
     end
     return out
@@ -817,7 +786,7 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
 
         p_no = sqrt.(Qslice0.^2 .+ Uslice0.^2)
         p_filt = Dict{Float64, Matrix{Float64}}()
-        for Llarge in data.L_ok
+        for Llarge in sort(data.L_ok)
             qL = data.Qslice_filt[Llarge]
             uL = data.Uslice_filt[Llarge]
             p_filt[Llarge] = Float64.(sqrt.(qL.^2 .+ uL.^2))
@@ -848,8 +817,8 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         Uφ0 = get_chan_xy(Uphi_cube, cfg.iphi, cfg.n, cfg.m)
         Pφ0 = sqrt.(Qφ0.^2 .+ Uφ0.^2)
 
-        Qφf = _build_filtered_dict_from_slice(Qφ0, data.H_cache, data.L_ok)
-        Uφf = _build_filtered_dict_from_slice(Uφ0, data.H_cache, data.L_ok)
+        Qφf = _build_filtered_dict_from_slice(Qφ0, cfg, data.scales)
+        Uφf = _build_filtered_dict_from_slice(Uφ0, cfg, data.scales)
         Pφf = Dict{Float64, Matrix{Float64}}(k => sqrt.(Qφf[k].^2 .+ Uφf[k].^2) for k in keys(Qφf))
 
         _plot_component_spectrum(cfg, data.axes.kx, Qφ0, Qφf,

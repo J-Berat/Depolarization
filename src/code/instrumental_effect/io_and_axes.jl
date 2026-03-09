@@ -49,10 +49,10 @@ function get_chan_xy(cube, ichan::Int, n::Int, m::Int)
 
     if sz[1] == n && sz[2] == m
         1 <= ichan <= sz[3] || error("ichan=$ichan out of bounds for third dimension=$(sz[3])")
-        return @view cube[:, :, ichan]
+        return float.(@view cube[:, :, ichan])
     elseif sz[2] == n && sz[3] == m
         1 <= ichan <= sz[1] || error("ichan=$ichan out of bounds for first dimension=$(sz[1])")
-        return @view cube[ichan, :, :]
+        return float.(reshape(@view(cube[ichan, :, :]), n, m))
     else
         error("Unsupported cube shape $(sz). Expected (n,m,nν) or (nν,n,m) with n=$n m=$m.")
     end
@@ -242,22 +242,22 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
 
     K = 1.0 / nLambda
 
-    # Normalize Q/U to (nx, ny, nν) without eager full-array type conversions.
+    # Normalize Q/U to (nx, ny, nν)
     if nDims == 1
         length(Q) == nLambda || error("1D Q/U must have length(nuArray) elements")
-        Q = reshape(Q, (1, 1, length(Q)))
-        U = reshape(U, (1, 1, length(U)))
+        Q = reshape(Float64.(Q), (1, 1, length(Q)))
+        U = reshape(Float64.(U), (1, 1, length(U)))
     elseif nDims == 2
         size(Q, 2) == nLambda || error("2D Q/U expected shape (nx, nν) with nν=$(nLambda), got size(Q)=$(size(Q))")
-        Q = reshape(Q, (1, size(Q, 1), size(Q, 2)))
-        U = reshape(U, (1, size(U, 1), size(U, 2)))
+        Q = reshape(Float64.(Q), (1, size(Q, 1), size(Q, 2)))
+        U = reshape(Float64.(U), (1, size(U, 1), size(U, 2)))
     elseif nDims == 3
         if size(Q, 3) == nLambda
-            Q = Q
-            U = U
+            Q = Float64.(Q)
+            U = Float64.(U)
         elseif size(Q, 1) == nLambda
-            Q = PermutedDimsArray(Q, (2, 3, 1))
-            U = PermutedDimsArray(U, (2, 3, 1))
+            Q = permutedims(Float64.(Q), (2, 3, 1))
+            U = permutedims(Float64.(U), (2, 3, 1))
         else
             error("3D Q/U must have frequency axis first or last matching nν=$(nLambda), got size(Q)=$(size(Q))")
         end
@@ -272,10 +272,9 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
 
     Fr = zeros(Float64, nx, ny, nPhi)
     Fi = zeros(Float64, nx, ny, nPhi)
-
-    function _accumulate_phi!(i::Int)
+    @inbounds for i in 1:nPhi
         phi = Float64(PhiArray[i])
-        @inbounds for l in 1:nLambda
+        for l in 1:nLambda
             θ = -2.0 * phi * a[l]
             c = cos(θ)
             s = sin(θ)
@@ -283,28 +282,16 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
                 for x in 1:nx
                     q = Q[x, y, l]
                     u = U[x, y, l]
-                    Fr[x, y, i] += float(q) * c - float(u) * s
-                    Fi[x, y, i] += float(q) * s + float(u) * c
+                    Fr[x, y, i] += q * c - u * s
+                    Fi[x, y, i] += q * s + u * c
                 end
             end
         end
         @views Fr[:, :, i] .*= K
         @views Fi[:, :, i] .*= K
-    end
-
-    threaded = Threads.nthreads() > 1 && nPhi > 1
-    if threaded
-        log_progress && @info "RM synthesis threaded execution; per-phi progress bar disabled" threads=Threads.nthreads() n_phi=nPhi
-        Threads.@threads for i in 1:nPhi
-            _accumulate_phi!(i)
-        end
-    else
-        for i in 1:nPhi
-            _accumulate_phi!(i)
-            if log_progress
-                print_progress(i, nPhi)
-                @debug "RM synthesis accumulation" idx=i total=nPhi
-            end
+        if log_progress
+            print_progress(i, nPhi)
+            @debug "RM synthesis accumulation" idx=i total=nPhi
         end
     end
 
@@ -344,32 +331,19 @@ function getRMSF(nuArray::AbstractArray, PhiArray::AbstractArray; log_progress::
     fwhmRMSF = 3.8 / (maximum(LambdaSqArray) - minimum(LambdaSqArray))
 
     RMSF_amp = zeros(Float64, nPhi)
-
-    function _accumulate_phi_amp!(i::Int)
+    @inbounds for i in 1:nPhi
         phi = Float64(PhiArray[i])
         re = 0.0
         im = 0.0
-        @inbounds for l in 1:nLambda
+        for l in 1:nLambda
             θ = -2.0 * phi * a[l]
             re += cos(θ)
             im += sin(θ)
         end
         RMSF_amp[i] = K * hypot(re, im)
-    end
-
-    threaded = Threads.nthreads() > 1 && nPhi > 1
-    if threaded
-        log_progress && @info "RMSF threaded execution; per-phi progress bar disabled" threads=Threads.nthreads() n_phi=nPhi
-        Threads.@threads for i in 1:nPhi
-            _accumulate_phi_amp!(i)
-        end
-    else
-        for i in 1:nPhi
-            _accumulate_phi_amp!(i)
-            if log_progress
-                print_progress(i, nPhi)
-                @debug "RMSF accumulation" idx=i total=nPhi
-            end
+        if log_progress
+            print_progress(i, nPhi)
+            @debug "RMSF accumulation" idx=i total=nPhi
         end
     end
 
