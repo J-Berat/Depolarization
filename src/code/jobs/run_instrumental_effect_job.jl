@@ -18,6 +18,8 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
     by_in = simulation_field_path(sim_root, sim, "By")
     bz_in = simulation_field_path(sim_root, sim, "Bz")
     dens_in = simulation_field_path(sim_root, sim, "density")
+    llarge_list = Float64.(cfg_get(cfg, ["tasks", "instrumental_effect", "llarge_list"];
+                                   default=[200.0, 180.0, 165.0, 150.0, 135.0, 120.0, 105.0, 90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0]))
 
     try
         require_existing_files([
@@ -50,6 +52,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         By_in = by_in,
         Bz_in = bz_in,
         dens_in = dens_in,
+        Llarge_list = llarge_list,
     )
 
     flags = RunFlags(

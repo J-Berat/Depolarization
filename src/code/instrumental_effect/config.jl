@@ -15,7 +15,7 @@ Base.@kwdef struct InstrumentalConfig
     m::Int = 256
     Lbox_pc::Float64 = 50.0
     Lcut_small::Float64 = 1.0
-    Llarge_list::Vector{Float64} = [100.0, 50.0, 40.0, 20.0]
+    Llarge_list::Vector{Float64} = [200.0, 180.0, 165.0, 150.0, 135.0, 120.0, 105.0, 90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0]
 
     νmin_MHz::Float64 = 120.0
     νmax_MHz::Float64 = 167.0
