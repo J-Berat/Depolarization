@@ -56,6 +56,32 @@ function _collect_series(no_filter_img, filtered_imgs::AbstractDict{<:Real, <:Ab
 end
 
 """
+    _select_display_filters(...)
+
+Selects at most `n_display` representative filter scales for the main spectrum plot.
+"""
+function _select_display_filters(Lsorted::AbstractVector{<:Real}; n_display::Int=4)
+    n = length(Lsorted)
+    n == 0 && return Float64[]
+    n <= n_display && return Float64.(Lsorted)
+
+    idx = unique(clamp.(round.(Int, range(1, n; length=n_display)), 1, n))
+    return Float64.(Lsorted[idx])
+end
+
+"""
+    _cycled_curve_colors(...)
+
+Returns `n` colors by cycling through the base spectrum palette.
+"""
+function _cycled_curve_colors(n::Int)
+    n <= 0 && return Symbol[]
+    base = curve_colors(min(n, 9))
+    n <= length(base) && return base
+    return [base[mod1(i, length(base))] for i in 1:n]
+end
+
+"""
     _rm_log_progress_enabled(...)
 
 Controls RM synthesis progress logging. Progress logging is enabled by default
@@ -73,25 +99,192 @@ function _rm_log_progress_enabled()
 end
 
 """
+    _integrity_push_check!(...)
+
+Adds one integrity check record to the report lists.
+"""
+function _integrity_push_check!(checks::Vector{Dict{String,Any}}, critical_failures::Vector{String},
+                                warnings::Vector{String}, name::String, passed::Bool;
+                                critical::Bool=true, details::AbstractString="")
+    level = critical ? "critical" : "warning"
+    msg = passed ? "ok" : (isempty(details) ? "failed" : details)
+    push!(checks, Dict{String,Any}(
+        "name" => name,
+        "level" => level,
+        "passed" => passed,
+        "message" => msg,
+    ))
+    if !passed
+        if critical
+            push!(critical_failures, name)
+        else
+            push!(warnings, name)
+        end
+    end
+    return nothing
+end
+
+"""
+    _write_integrity_report(...)
+
+Writes a compact integrity report next to run outputs.
+"""
+function _write_integrity_report(path::AbstractString, report::Dict{String,Any})
+    lines = String[
+        "integrity_status=$(report["status"])",
+        "critical_failures=$(report["critical_failures"])",
+        "warnings=$(report["warnings"])",
+        "checks_total=$(report["checks_total"])",
+        "",
+        "[checks]",
+    ]
+
+    for item in report["checks"]
+        push!(lines, string(
+            "- ", item["name"],
+            " | level=", item["level"],
+            " | passed=", item["passed"],
+            " | message=", item["message"],
+        ))
+    end
+
+    open(path, "w") do io
+        write(io, join(lines, "\n"))
+        write(io, "\n")
+    end
+    return path
+end
+
+"""
     _validate_filter_inputs(...)
 
-    Validates runtime config and loaded filtering inputs.
+Validates dimensions, NaN/Inf, units consistency and expected physical ranges.
+Critical failures abort the run.
 """
 function _validate_filter_inputs(cfg::InstrumentalConfig, Qdata, Udata, Pmax0, nuArray, PhiArray)
-    validate_instrumental_config!(cfg)
+    checks = Dict{String,Any}[]
+    critical_failures = String[]
+    warnings = String[]
+
+    try
+        validate_instrumental_config!(cfg)
+        _integrity_push_check!(checks, critical_failures, warnings, "config.basics", true; critical=true)
+    catch err
+        _integrity_push_check!(checks, critical_failures, warnings, "config.basics", false;
+                               critical=true, details=sprint(showerror, err))
+    end
 
     nν = length(nuArray)
-    nν > 0 || error("Empty frequency axis from rm_synthesis_axes")
-    length(PhiArray) > 0 || error("Empty Phi axis in cfg.PhiArray")
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.nu.non_empty", nν > 0; critical=true)
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.phi.non_empty", length(PhiArray) > 0; critical=true)
 
-    q_layout = require_stokes_cube_layout(Qdata, "Qnu", cfg, nν)
-    u_layout = require_stokes_cube_layout(Udata, "Unu", cfg, nν)
-    q_layout == u_layout || error("Qnu/Unu cube layout mismatch: Qnu frequency axis dim=$q_layout, Unu frequency axis dim=$u_layout")
+    nu_finite = !isempty(nuArray) && all(isfinite, nuArray)
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.nu.finite", nu_finite; critical=true)
+    nu_positive = !isempty(nuArray) && all(>(0), nuArray)
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.nu.positive_hz", nu_positive; critical=true)
+    nu_sorted = length(nuArray) <= 1 || all(diff(nuArray) .> 0)
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.nu.strictly_increasing", nu_sorted; critical=true)
 
-    require_channel_index(cfg.ichan, nν, "ichan")
-    require_map_layout(Pmax0, "Pmax", cfg)
+    phi_finite = !isempty(PhiArray) && all(isfinite, PhiArray)
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.phi.finite", phi_finite; critical=true)
+    phi_sorted = length(PhiArray) <= 1 || all(diff(PhiArray) .> 0)
+    _integrity_push_check!(checks, critical_failures, warnings, "axes.phi.strictly_increasing", phi_sorted; critical=true)
 
-    return true
+    if !isempty(nuArray)
+        expected_min_hz = cfg.νmin_MHz * 1e6
+        expected_max_hz = cfg.νmax_MHz * 1e6
+        expected_step_hz = cfg.Δν_MHz * 1e6
+
+        first_ok = isapprox(first(nuArray), expected_min_hz; rtol=1e-10, atol=1e-6)
+        step_ok = length(nuArray) <= 1 || all(isapprox.(diff(nuArray), expected_step_hz; rtol=1e-10, atol=1e-6))
+        # Range syntax (νmin:Δν:νmax) may stop before νmax when Δν does not divide the span.
+        last_not_above_max = last(nuArray) <= expected_max_hz + 1e-6
+
+        nν = length(nuArray)
+        expected_last_from_step = expected_min_hz + (nν - 1) * expected_step_hz
+        last_consistent_with_step = isapprox(last(nuArray), expected_last_from_step; rtol=1e-10, atol=1e-6)
+
+        units_ok = first_ok && step_ok && last_not_above_max && last_consistent_with_step
+        units_details = units_ok ? "" : string(
+            "nu-axis mismatch (first=", first(nuArray),
+            ", last=", last(nuArray),
+            ", step_expected=", expected_step_hz,
+            ", max_cfg=", expected_max_hz, ")"
+        )
+        _integrity_push_check!(checks, critical_failures, warnings, "units.frequency.MHz_to_Hz", units_ok;
+                               critical=true, details=units_details)
+    else
+        _integrity_push_check!(checks, critical_failures, warnings, "units.frequency.MHz_to_Hz", false;
+                               critical=true, details="empty nuArray")
+    end
+
+    try
+        q_layout = require_stokes_cube_layout(Qdata, "Qnu", cfg, nν)
+        u_layout = require_stokes_cube_layout(Udata, "Unu", cfg, nν)
+        layouts_match = q_layout == u_layout
+        _integrity_push_check!(checks, critical_failures, warnings, "dims.stokes_layout", layouts_match;
+                               critical=true, details=layouts_match ? "" : "Qnu/Unu layout mismatch")
+    catch err
+        _integrity_push_check!(checks, critical_failures, warnings, "dims.stokes_layout", false;
+                               critical=true, details=sprint(showerror, err))
+    end
+
+    try
+        require_channel_index(cfg.ichan, nν, "ichan")
+        _integrity_push_check!(checks, critical_failures, warnings, "index.ichan.in_bounds", true; critical=true)
+    catch err
+        _integrity_push_check!(checks, critical_failures, warnings, "index.ichan.in_bounds", false;
+                               critical=true, details=sprint(showerror, err))
+    end
+
+    try
+        require_map_layout(Pmax0, "Pmax", cfg)
+        _integrity_push_check!(checks, critical_failures, warnings, "dims.pmax_layout", true; critical=true)
+    catch err
+        _integrity_push_check!(checks, critical_failures, warnings, "dims.pmax_layout", false;
+                               critical=true, details=sprint(showerror, err))
+    end
+
+    q_finite = all(isfinite, Qdata)
+    u_finite = all(isfinite, Udata)
+    pmax_finite = all(isfinite, Pmax0)
+    _integrity_push_check!(checks, critical_failures, warnings, "nan_inf.Qnu", q_finite; critical=true)
+    _integrity_push_check!(checks, critical_failures, warnings, "nan_inf.Unu", u_finite; critical=true)
+    _integrity_push_check!(checks, critical_failures, warnings, "nan_inf.Pmax", pmax_finite; critical=true)
+
+    pmax_non_negative = all(Pmax0 .>= 0)
+    _integrity_push_check!(checks, critical_failures, warnings, "physical.Pmax.non_negative", pmax_non_negative;
+                           critical=true, details="Pmax must be >= 0")
+
+    freq_band_plausible = (1.0 <= cfg.νmin_MHz <= cfg.νmax_MHz <= 5.0e4)
+    _integrity_push_check!(checks, critical_failures, warnings, "physical.frequency_band_plausible", freq_band_plausible;
+                           critical=false, details="Expected ~[1, 50000] MHz")
+
+    phi_span_plausible = !isempty(PhiArray) && (maximum(abs.(PhiArray)) <= 1.0e5)
+    _integrity_push_check!(checks, critical_failures, warnings, "physical.phi_range_plausible", phi_span_plausible;
+                           critical=false, details="Expected |phi| <= 1e5 rad m^-2")
+
+    report = Dict{String,Any}(
+        "status" => isempty(critical_failures) ? "pass" : "fail",
+        "critical_failures" => length(critical_failures),
+        "warnings" => length(warnings),
+        "checks_total" => length(checks),
+        "critical_failed_checks" => copy(critical_failures),
+        "warning_checks" => copy(warnings),
+        "checks" => checks,
+    )
+
+    report_path = _write_integrity_report(joinpath(cfg.base_out, "integrity_report.txt"), report)
+    report["report_path"] = report_path
+
+    if isempty(critical_failures)
+        @info "Integrity checks passed" checks=length(checks) warnings=length(warnings) report=report_path
+    else
+        @error "Integrity critical checks failed; aborting run" failed=critical_failures report=report_path
+        error("Critical integrity checks failed: $(join(critical_failures, ", "))")
+    end
+
+    return report
 end
 
 """
@@ -149,7 +342,7 @@ function run_filter_pass(cfg::InstrumentalConfig)
     Udata = read_FITS(cfg.U_in)
     Pmax0 = Float32.(read_FITS(cfg.Pmax_nofilter_path))
 
-    _validate_filter_inputs(cfg, Qdata, Udata, Pmax0, nuArray, PhiArray)
+    integrity = _validate_filter_inputs(cfg, Qdata, Udata, Pmax0, nuArray, PhiArray)
 
     Qslice_filt = Dict{Float64, Matrix{Float32}}()
     Uslice_filt = Dict{Float64, Matrix{Float32}}()
@@ -180,6 +373,7 @@ function run_filter_pass(cfg::InstrumentalConfig)
         axes,
         Vector{Float64}(nuArray),
         Vector{Float64}(PhiArray),
+        integrity,
     )
 end
 
@@ -308,8 +502,9 @@ end
     Plots `Pmax` spectra along `kx` with peak inset.
 """
 function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
-    Lsorted = sort(data.L_ok)
-    series = _collect_series(data.Pmax0, Dict(k => data.Pmax_filt[k] for k in Lsorted), data.axes.kx, Lsorted)
+    Lall = sort(data.L_ok)
+    Ldisplay = _select_display_filters(Lall; n_display=4)
+    series = _collect_series(data.Pmax0, Dict(k => data.Pmax_filt[k] for k in Ldisplay), data.axes.kx, Ldisplay)
 
     with_theme(theme_latexfonts()) do
         set_theme_spectra!()
@@ -331,12 +526,13 @@ function _plot_pmax_kx(cfg::InstrumentalConfig, data::FilterPassResult)
             kpeak = Float64[]
             cpeak = Symbol[]
 
-            for (i, Llarge) in enumerate(Lsorted)
+            cols = _cycled_curve_colors(1 + length(Lall))
+            for (i, Llarge) in enumerate(Lall)
                 kxv, Pk = psd1d_x_mean_over_y(data.Pmax_filt[Llarge], data.axes.kx; remove_mean=true)
                 kp = kpeak_in_window(kxv, Pk; kmin=kmin_win, kmax=kmax_win)
                 push!(Leff, (50 / 256) * Llarge)
                 push!(kpeak, kp)
-                push!(cpeak, curve_colors(1 + length(Lsorted))[i + 1])
+                push!(cpeak, cols[i + 1])
             end
 
             ok = isfinite.(Leff) .& isfinite.(kpeak) .& (kpeak .> 0)
@@ -398,8 +594,9 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
                                   add_verticals::Bool=true,
                                   peak_window::Union{Nothing, Tuple{Real, Real}}=nothing,
                                   inset_title::Union{Nothing, Symbol}=nothing)
-    Lsorted = sort(collect(keys(filtered_imgs)))
-    series = _collect_series(no_filter_img, filtered_imgs, kx, Lsorted)
+    Lall = sort(collect(keys(filtered_imgs)))
+    Ldisplay = _select_display_filters(Lall; n_display=4)
+    series = _collect_series(no_filter_img, filtered_imgs, kx, Ldisplay)
 
     with_theme(theme_latexfonts()) do
         set_theme_spectra!()
@@ -421,11 +618,11 @@ function _plot_component_spectrum(cfg::InstrumentalConfig, kx::AbstractVector,
             Leff = Float64[]
             kpeak = Float64[]
             cpeak = Symbol[]
-            cols = curve_colors(1 + length(Lsorted))
+            cols = _cycled_curve_colors(1 + length(Lall))
 
-            for (i, Llarge) in enumerate(Lsorted)
-                s = series[i + 1]
-                kp = kpeak_in_window(s.kx, s.Pk; kmin=kmin_win, kmax=kmax_win)
+            for (i, Llarge) in enumerate(Lall)
+                kxv, Pk = psd1d_x_mean_over_y(filtered_imgs[Llarge], kx; remove_mean=true)
+                kp = kpeak_in_window(kxv, Pk; kmin=kmin_win, kmax=kmax_win)
                 push!(Leff, (50 / 256) * Llarge)
                 push!(kpeak, kp)
                 push!(cpeak, cols[i + 1])
@@ -540,8 +737,8 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         Qslice0 = get_chan_xy(data.Qdata, cfg.ichan, cfg.n, cfg.m)
         Uslice0 = get_chan_xy(data.Udata, cfg.ichan, cfg.n, cfg.m)
 
-        q_filt = Dict{Float64, Matrix{Float64}}(k => Matrix{Float64}(data.Qslice_filt[k]) for k in keys(data.Qslice_filt))
-        u_filt = Dict{Float64, Matrix{Float64}}(k => Matrix{Float64}(data.Uslice_filt[k]) for k in keys(data.Uslice_filt))
+        q_filt = copy(data.Qslice_filt)
+        u_filt = copy(data.Uslice_filt)
 
         _plot_component_spectrum(cfg, data.axes.kx, Qslice0, q_filt,
             LaTeXString("S_{Q}(k_x;\\nu_{50})"); add_verticals=true)
@@ -552,7 +749,9 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         p_no = sqrt.(Qslice0.^2 .+ Uslice0.^2)
         p_filt = Dict{Float64, Matrix{Float64}}()
         for Llarge in sort(data.L_ok)
-            p_filt[Llarge] = sqrt.(Float64.(data.Qslice_filt[Llarge]).^2 .+ Float64.(data.Uslice_filt[Llarge]).^2)
+            qL = data.Qslice_filt[Llarge]
+            uL = data.Uslice_filt[Llarge]
+            p_filt[Llarge] = Float64.(sqrt.(qL.^2 .+ uL.^2))
         end
         _plot_component_spectrum(cfg, data.axes.kx, p_no, p_filt,
             LaTeXString("S_{P}(k_x;\\nu_{50})");
@@ -561,7 +760,7 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
             inset_title=:Pnu)
 
         q2_no = Qslice0 .^ 2
-        q2_filt = Dict{Float64, Matrix{Float64}}(k => Float64.(data.Qslice_filt[k]).^2 for k in keys(data.Qslice_filt))
+        q2_filt = Dict{Float64, Matrix{Float64}}(k => Float64.(data.Qslice_filt[k].^2) for k in keys(data.Qslice_filt))
         _plot_component_spectrum(cfg, data.axes.kx, q2_no, q2_filt,
             LaTeXString("S_{Q^{2}}(k_x;\\nu_{50})"); add_verticals=true)
     end

@@ -21,6 +21,7 @@ struct FilterPassResult{
     axes::TA
     nuArray::Vector{Float64}
     PhiArray::Vector{Float64}
+    integrity::Dict{String,Any}
 end
 
 """

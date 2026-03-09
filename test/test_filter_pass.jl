@@ -23,7 +23,7 @@ function _with_rm_progress_disabled(f::Function)
     end
 end
 
-function _make_minimal_cfg(td::String; bad_layout::Bool=false)
+function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=false)
     q_path = joinpath(td, "Qnu.fits")
     u_path = joinpath(td, "Unu.fits")
     pmax_path = joinpath(td, "Pmax.fits")
@@ -33,7 +33,11 @@ function _make_minimal_cfg(td::String; bad_layout::Bool=false)
     q_shape = bad_layout ? (4, 4, 3) : (4, 4, 4)
     _write_basic_fits(q_path, randn(Float32, q_shape...))
     _write_basic_fits(u_path, randn(Float32, q_shape...))
-    _write_basic_fits(pmax_path, rand(Float32, 4, 4))
+    pmax = rand(Float32, 4, 4)
+    if pmax_nan
+        pmax[1, 1] = NaN32
+    end
+    _write_basic_fits(pmax_path, pmax)
     _write_basic_fits(qphi_path, randn(Float32, 4, 4, 3))
     _write_basic_fits(uphi_path, randn(Float32, 4, 4, 3))
 
@@ -73,10 +77,33 @@ end
             @test result isa InstrumentalEffect.FilterPassResult
             @test result.L_ok == [4.0]
             @test size(result.Pmax0) == (4, 4)
+            @test result.integrity["status"] == "pass"
+            @test isfile(result.integrity["report_path"])
             @test haskey(result.Qslice_filt, 4.0)
             @test size(result.Qslice_filt[4.0]) == (4, 4)
             @test isfile(joinpath(cfg.base_out, "HardBandPass_remove_L0_to_1pc_and_4to50pc", "Qnu_filtered.fits"))
             @test isfile(joinpath(cfg.base_out, "HardBandPass_remove_L0_to_1pc_and_4to50pc", "RMSynthesis", "Pphi_max.fits"))
+        end
+    end
+
+    @testset "NaN in critical map aborts run" begin
+        mktempdir() do td
+            cfg = _make_minimal_cfg(td; pmax_nan=true)
+
+            err = try
+                _with_rm_progress_disabled() do
+                    run_filter_pass(cfg)
+                end
+                nothing
+            catch ex
+                ex
+            end
+
+            report_path = joinpath(cfg.base_out, "integrity_report.txt")
+            @test err isa ErrorException
+            @test occursin("Critical integrity checks failed", sprint(showerror, err))
+            @test isfile(report_path)
+            @test occursin("nan_inf.Pmax", read(report_path, String))
         end
     end
 
@@ -94,7 +121,7 @@ end
             end
 
             @test err isa ErrorException
-            @test occursin("frequency axis mismatch", sprint(showerror, err))
+            @test occursin("dims.stokes_layout", sprint(showerror, err))
         end
     end
 

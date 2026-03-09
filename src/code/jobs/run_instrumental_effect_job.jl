@@ -60,11 +60,15 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         run_lic = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_lic"]; default=false)),
     )
 
-    run_pipeline(run_cfg; flags=flags)
+    data = run_pipeline(run_cfg; flags=flags)
 
     return Dict(
         "task" => "instrumental",
         "output_dir" => run_cfg.base_out,
+        "integrity_report" => get(data.integrity, "report_path", nothing),
+        "integrity_status" => get(data.integrity, "status", "unknown"),
+        "integrity_critical_failures" => get(data.integrity, "critical_failures", -1),
+        "integrity_warnings" => get(data.integrity, "warnings", -1),
         "flags" => Dict(
             "run_pmax_maps" => flags.run_pmax_maps,
             "run_psd" => flags.run_psd,

@@ -22,7 +22,8 @@ function apply_to_array_xy(data, H; n::Int=256, m::Int=256)
         return apply_instrument_2d(data, H)
     elseif nd == 3
         sz = size(data)
-        out = similar(float.(data), sz)
+        Tout = float(eltype(data))
+        out = similar(data, Tout, sz)
 
         if sz[1] == n && sz[2] == m
             @views for k in 1:sz[3]
@@ -54,9 +55,6 @@ function instrument_bandpass_L(n::Int, m::Int;
                                fNy::Real)
     fx = fftfreq(n, Δx)
     fy = fftfreq(m, Δy)
-    FX = repeat(fx, 1, m)
-    FY = repeat(fy', n, 1)
-    F = sqrt.(FX.^2 .+ FY.^2)
 
     flo = 1 / Llarge
     fhi_raw = 1 / Lcut_small
@@ -64,6 +62,15 @@ function instrument_bandpass_L(n::Int, m::Int;
 
     @debug "Filter" Lcut_small Llarge flo fhi fhi_raw
 
-    H = Float32.((F .>= flo) .& (F .<= fhi))
+    flo2 = flo^2
+    fhi2 = fhi^2
+    H = Matrix{Float32}(undef, n, m)
+    @inbounds for j in 1:m
+        fy2 = float(fy[j])^2
+        for i in 1:n
+            f2 = float(fx[i])^2 + fy2
+            H[i, j] = (f2 >= flo2 && f2 <= fhi2) ? 1f0 : 0f0
+        end
+    end
     return H, fftshift(H)
 end

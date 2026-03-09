@@ -1,4 +1,5 @@
 using CairoMakie
+using LaTeXStrings
 using Random
 using Statistics
 using Printf
@@ -239,7 +240,8 @@ end
     Draws B profile with reversal windows and their distances.
 """
 function plot_profile_with_windows!(ax, dist::Vector{Float64}, prof::Vector{Float64},
-                                    win_merged::Vector{Tuple{Int,Int}}; color=:dodgerblue)
+                                    win_merged::Vector{Tuple{Int,Int}}; color=:dodgerblue,
+                                    annotation_size::Int=13)
     lines!(ax, dist, prof; color=color, linewidth=2.5)
     hlines!(ax, [0.0]; color=:blue, linestyle=:dash, linewidth=1.8)
 
@@ -258,12 +260,13 @@ function plot_profile_with_windows!(ax, dist::Vector{Float64}, prof::Vector{Floa
         vlines!(ax, [xL, xR]; color=:gray30, linestyle=:dot, linewidth=1.4)
         lines!(ax, [xL, xR], [y_annot, y_annot]; color=:black, linewidth=1.3)
         text!(ax, (xL + xR) / 2, y_annot + 0.01 * yspan;
-              text=@sprintf("%.2f pc", width_pc),
+              text=latexstring(@sprintf("%.2f\\ \\mathrm{pc}", width_pc)),
               align=(:center, :bottom),
-              fontsize=13,
+              fontsize=annotation_size,
               color=:black)
     end
 
+    xlims!(ax, minimum(dist), maximum(dist))
     ylims!(ax, ylo - 0.08 * yspan, yhi + 0.26 * yspan)
     return nothing
 end
@@ -376,6 +379,17 @@ function run_reversal_transition_job(cfg)::Dict{String,Any}
     phi_peak_1 = phiArray[ipeak_1]
     phi_peak_10 = phiArray[ipeak_10]
 
+    heatmap_label_size = Int(cfg_get(cfg, ["tasks", "reversal_transition_job", "heatmap_label_size"];
+                                     default=36))
+    heatmap_tick_size = Int(cfg_get(cfg, ["tasks", "reversal_transition_job", "heatmap_tick_size"];
+                                    default=30))
+    plot_label_size = Int(cfg_get(cfg, ["tasks", "reversal_transition_job", "plot_label_size"];
+                                  default=34))
+    plot_tick_size = Int(cfg_get(cfg, ["tasks", "reversal_transition_job", "plot_tick_size"];
+                                 default=28))
+    title_size = Int(cfg_get(cfg, ["tasks", "reversal_transition_job", "title_size"]; default=38))
+    annotation_size = Int(cfg_get(cfg, ["tasks", "reversal_transition_job", "annotation_size"]; default=18))
+
     out_plot = standard_output_path(cfg, "reversal", "overview", "pdf"; simu=sim, los=los)
     out_csv = standard_output_path(cfg, "reversal", "windows", "csv"; simu=sim, los=los)
     out_log = standard_output_path(cfg, "reversal", "summary", "log"; simu=sim, los=los)
@@ -415,72 +429,87 @@ function run_reversal_transition_job(cfg)::Dict{String,Any}
         pmax_cr = (pmin, pmaxv)
 
         ax_h1 = Axis(fig[1, 1],
-            title=@sprintf("1st decile (i=%d, j=%d)", i1, j1),
-            xlabel="i", ylabel="j",
+            title=latexstring(@sprintf("1^{\\mathrm{st}}\\ \\mathrm{decile}\\ (i=%d,\\ j=%d)", i1, j1)),
+            xlabel=L"i", ylabel=L"j",
+            titlesize=title_size,
+            xlabelsize=heatmap_label_size, ylabelsize=heatmap_label_size,
+            xticklabelsize=heatmap_tick_size, yticklabelsize=heatmap_tick_size,
             xgridvisible=false, ygridvisible=false)
         hm = heatmap!(ax_h1, pmax; colormap=:magma, colorrange=pmax_cr)
         vlines!(ax_h1, [i1]; color=:white, linestyle=:dash, linewidth=2.0)
         hlines!(ax_h1, [j1]; color=:white, linestyle=:dash, linewidth=2.0)
+        xlims!(ax_h1, 1, npix)
+        ylims!(ax_h1, 1, npix)
 
         ax_h10 = Axis(fig[2, 1],
-            title=@sprintf("10th decile (i=%d, j=%d)", i10, j10),
-            xlabel="i", ylabel="j",
+            title=latexstring(@sprintf("10^{\\mathrm{th}}\\ \\mathrm{decile}\\ (i=%d,\\ j=%d)", i10, j10)),
+            xlabel=L"i", ylabel=L"j",
+            titlesize=title_size,
+            xlabelsize=heatmap_label_size, ylabelsize=heatmap_label_size,
+            xticklabelsize=heatmap_tick_size, yticklabelsize=heatmap_tick_size,
             xgridvisible=false, ygridvisible=false)
         heatmap!(ax_h10, pmax; colormap=:magma, colorrange=pmax_cr)
         vlines!(ax_h10, [i10]; color=:white, linestyle=:dash, linewidth=2.0)
         hlines!(ax_h10, [j10]; color=:white, linestyle=:dash, linewidth=2.0)
+        xlims!(ax_h10, 1, npix)
+        ylims!(ax_h10, 1, npix)
 
-        Colorbar(fig[1:2, 2], hm; label="Pmax [K]")
+        Colorbar(fig[1:2, 2], hm; label=L"P_{\max}\ [\mathrm{K}]",
+            labelsize=heatmap_label_size, ticklabelsize=heatmap_tick_size)
 
         g_right_top = GridLayout(fig[1, 3])
-        rowgap!(g_right_top, 5)
+        rowgap!(g_right_top, 0)
 
         ax_b1 = Axis(g_right_top[1, 1],
-            title=@sprintf("B LOS - 1st decile (i=%d, j=%d)", i1, j1),
-            xlabel="Distance [pc]",
-            ylabel="B [μG]",
+            title="",
+            xlabel=L"\mathrm{Distance}\ [\mathrm{pc}]",
+            ylabel=L"B\ [\mu\mathrm{G}]",
             xaxisposition=:top,
+            titlesize=title_size,
+            xlabelsize=plot_label_size, ylabelsize=plot_label_size,
+            xticklabelsize=plot_tick_size, yticklabelsize=plot_tick_size,
             xgridvisible=false, ygridvisible=false)
-        plot_profile_with_windows!(ax_b1, dist, Vector{Float64}(prof_1_s), win_merged_1; color=:dodgerblue)
+        plot_profile_with_windows!(ax_b1, dist, Vector{Float64}(prof_1_s), win_merged_1;
+            color=:dodgerblue, annotation_size=annotation_size)
 
         ax_f1 = Axis(g_right_top[2, 1],
-            xlabel="ϕ [rad m^-2]",
-            ylabel="|F(ϕ)|",
+            title="",
+            xlabel=L"\phi\ [\mathrm{rad}\ \mathrm{m}^{-2}]",
+            ylabel=L"\left|F(\phi)\right|",
+            xlabelsize=plot_label_size, ylabelsize=plot_label_size,
+            xticklabelsize=plot_tick_size, yticklabelsize=plot_tick_size,
             xgridvisible=false, ygridvisible=false)
         lines!(ax_f1, phiArray, fdf_1; color=:dodgerblue, linewidth=2)
-        vlines!(ax_f1, [phi_peak_1]; color=:dodgerblue, linestyle=:dash, linewidth=1.8)
-        text!(ax_f1, phi_peak_1, maximum(fdf_1);
-              text=@sprintf("ϕpeak=%.2f", phi_peak_1),
-              align=(:left, :top),
-              fontsize=12,
-            color=:dodgerblue)
-        rowsize!(g_right_top, 1, Relative(0.72))
-        rowsize!(g_right_top, 2, Relative(0.28))
+        xlims!(ax_f1, minimum(phiArray), maximum(phiArray))
+        rowsize!(g_right_top, 1, Relative(0.6))
+        rowsize!(g_right_top, 2, Relative(0.4))
 
         g_right_bottom = GridLayout(fig[2, 3])
-        rowgap!(g_right_bottom, 5)
+        rowgap!(g_right_bottom, 0)
 
         ax_b10 = Axis(g_right_bottom[1, 1],
-            title=@sprintf("B LOS - 10th decile (i=%d, j=%d)", i10, j10),
-            xlabel="Distance [pc]",
-            ylabel="B [μG]",
+            title="",
+            xlabel=L"\mathrm{Distance}\ [\mathrm{pc}]",
+            ylabel=L"B\ [\mu\mathrm{G}]",
             xaxisposition=:top,
+            titlesize=title_size,
+            xlabelsize=plot_label_size, ylabelsize=plot_label_size,
+            xticklabelsize=plot_tick_size, yticklabelsize=plot_tick_size,
             xgridvisible=false, ygridvisible=false)
-        plot_profile_with_windows!(ax_b10, dist, Vector{Float64}(prof_10_s), win_merged_10; color=:red)
+        plot_profile_with_windows!(ax_b10, dist, Vector{Float64}(prof_10_s), win_merged_10;
+            color=:red, annotation_size=annotation_size)
 
         ax_f10 = Axis(g_right_bottom[2, 1],
-            xlabel="ϕ [rad m^-2]",
-            ylabel="|F(ϕ)|",
+            title="",
+            xlabel=L"\phi\ [\mathrm{rad}\ \mathrm{m}^{-2}]",
+            ylabel=L"\left|F(\phi)\right|",
+            xlabelsize=plot_label_size, ylabelsize=plot_label_size,
+            xticklabelsize=plot_tick_size, yticklabelsize=plot_tick_size,
             xgridvisible=false, ygridvisible=false)
         lines!(ax_f10, phiArray, fdf_10; color=:dodgerblue, linewidth=2)
-        vlines!(ax_f10, [phi_peak_10]; color=:dodgerblue, linestyle=:dash, linewidth=1.8)
-        text!(ax_f10, phi_peak_10, maximum(fdf_10);
-              text=@sprintf("ϕpeak=%.2f", phi_peak_10),
-              align=(:left, :top),
-              fontsize=12,
-              color=:dodgerblue)
-        rowsize!(g_right_bottom, 1, Relative(0.72))
-        rowsize!(g_right_bottom, 2, Relative(0.28))
+        xlims!(ax_f10, minimum(phiArray), maximum(phiArray))
+        rowsize!(g_right_bottom, 1, Relative(0.6))
+        rowsize!(g_right_bottom, 2, Relative(0.4))
 
         save(out_plot, fig)
     end

@@ -240,8 +240,7 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
 
     size(Q) == size(U) || error("Q/U size mismatch: size(Q)=$(size(Q)) size(U)=$(size(U))")
 
-    WeightArray = ones(Float64, nLambda)
-    K = 1.0 / sum(WeightArray)
+    K = 1.0 / nLambda
 
     # Normalize Q/U to (nx, ny, nν)
     if nDims == 1
@@ -266,16 +265,30 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
         error("Unsupported Q/U dimensions: ndims=$(nDims)")
     end
 
-    P = @. (Q + 1im * U) * WeightArray[[CartesianIndex()], [CartesianIndex()], :]
     nx, ny = size(Q, 1), size(Q, 2)
 
-    Lambda0Sq = K * sum(WeightArray .* LambdaSqArray)
+    Lambda0Sq = K * sum(LambdaSqArray)
     a = LambdaSqArray .- Lambda0Sq
 
-    F = complex(zeros(Float64, nx, ny, nPhi))
-    for i in 1:nPhi
-        arg = exp.((-2.0im * Float64(PhiArray[i])) .* a)[[CartesianIndex()], [CartesianIndex()], :]
-        F[:, :, i] = K .* sum(P .* arg, dims=3)
+    Fr = zeros(Float64, nx, ny, nPhi)
+    Fi = zeros(Float64, nx, ny, nPhi)
+    @inbounds for i in 1:nPhi
+        phi = Float64(PhiArray[i])
+        for l in 1:nLambda
+            θ = -2.0 * phi * a[l]
+            c = cos(θ)
+            s = sin(θ)
+            for y in 1:ny
+                for x in 1:nx
+                    q = Q[x, y, l]
+                    u = U[x, y, l]
+                    Fr[x, y, i] += q * c - u * s
+                    Fi[x, y, i] += q * s + u * c
+                end
+            end
+        end
+        @views Fr[:, :, i] .*= K
+        @views Fi[:, :, i] .*= K
         if log_progress
             print_progress(i, nPhi)
             @debug "RM synthesis accumulation" idx=i total=nPhi
@@ -283,13 +296,16 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
     end
 
     if nDims == 1
-        F = dropdims(dropdims(F, dims=1), dims=1)
+        Fr = dropdims(dropdims(Fr, dims=1), dims=1)
+        Fi = dropdims(dropdims(Fi, dims=1), dims=1)
     elseif nDims == 2
-        F = dropdims(F, dims=1)
+        Fr = dropdims(Fr, dims=1)
+        Fi = dropdims(Fi, dims=1)
     end
 
-    log_progress && @info "RM synthesis complete" output_size=size(F)
-    return abs.(F), real.(F), imag.(F)
+    log_progress && @info "RM synthesis complete" output_size=size(Fr)
+    absF = hypot.(Fr, Fi)
+    return absF, Fr, Fi
 end
 
 """
@@ -306,24 +322,31 @@ function getRMSF(nuArray::AbstractArray, PhiArray::AbstractArray; log_progress::
     LambdaSqArray = @. (C_m / Float64.(nuArray))^2
     nPhi = length(PhiArray)
 
-    WeightArray = ones(Float64, length(LambdaSqArray))
-    K = 1.0 / sum(WeightArray)
+    nLambda = length(LambdaSqArray)
+    K = 1.0 / nLambda
 
-    Lambda0Sq = K * sum(WeightArray .* LambdaSqArray)
+    Lambda0Sq = K * sum(LambdaSqArray)
     a = LambdaSqArray .- Lambda0Sq
 
     fwhmRMSF = 3.8 / (maximum(LambdaSqArray) - minimum(LambdaSqArray))
 
-    RMSF = complex(zeros(Float64, nPhi))
-    for i in 1:nPhi
-        arg = exp.((-2.0im * Float64(PhiArray[i])) .* a)
-        RMSF[i] = K * sum(WeightArray .* arg)
+    RMSF_amp = zeros(Float64, nPhi)
+    @inbounds for i in 1:nPhi
+        phi = Float64(PhiArray[i])
+        re = 0.0
+        im = 0.0
+        for l in 1:nLambda
+            θ = -2.0 * phi * a[l]
+            re += cos(θ)
+            im += sin(θ)
+        end
+        RMSF_amp[i] = K * hypot(re, im)
         if log_progress
             print_progress(i, nPhi)
             @debug "RMSF accumulation" idx=i total=nPhi
         end
     end
 
-    log_progress && @info "RMSF computation complete" output_size=length(RMSF) fwhm=fwhmRMSF
-    return abs.(RMSF), fwhmRMSF
+    log_progress && @info "RMSF computation complete" output_size=length(RMSF_amp) fwhm=fwhmRMSF
+    return RMSF_amp, fwhmRMSF
 end
