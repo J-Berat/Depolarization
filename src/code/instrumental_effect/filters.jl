@@ -9,6 +9,35 @@ function apply_instrument_2d(img::AbstractMatrix, H::AbstractMatrix)
 end
 
 """
+    _apply_instrument_2d_planned!(...)
+
+Applies filter with reusable in-place FFT plans.
+"""
+function _apply_instrument_2d_planned!(out::AbstractMatrix, work::AbstractMatrix{ComplexF64},
+                                       plan_fwd, plan_inv,
+                                       img::AbstractMatrix, H::AbstractMatrix)
+    size(out) == size(img) == size(H) == size(work) || error("Planned filter size mismatch")
+    @inbounds for j in axes(img, 2)
+        for i in axes(img, 1)
+            work[i, j] = ComplexF64(float(img[i, j]), 0.0)
+        end
+    end
+    FFTW.mul!(work, plan_fwd, work)
+    @inbounds for j in axes(work, 2)
+        for i in axes(work, 1)
+            work[i, j] *= H[i, j]
+        end
+    end
+    FFTW.mul!(work, plan_inv, work)
+    @inbounds for j in axes(out, 2)
+        for i in axes(out, 1)
+            out[i, j] = real(work[i, j])
+        end
+    end
+    return out
+end
+
+"""
     apply_to_array_xy(...)
 
     Applies filter to 2D/3D arrays with supported axis layouts.
@@ -24,15 +53,21 @@ function apply_to_array_xy(data, H; n::Int=256, m::Int=256)
         sz = size(data)
         Tout = float(eltype(data))
         out = similar(data, Tout, sz)
+        work = Matrix{ComplexF64}(undef, n, m)
+        plan_fwd = plan_fft!(work)
+        plan_inv = plan_ifft!(work)
+        out2d = Matrix{Tout}(undef, n, m)
 
         if sz[1] == n && sz[2] == m
             @views for k in 1:sz[3]
-                out[:, :, k] = apply_instrument_2d(data[:, :, k], H)
+                _apply_instrument_2d_planned!(out2d, work, plan_fwd, plan_inv, data[:, :, k], H)
+                out[:, :, k] .= out2d
             end
             return out
         elseif sz[2] == n && sz[3] == m
             @views for k in 1:sz[1]
-                out[k, :, :] = apply_instrument_2d(data[k, :, :], H)
+                _apply_instrument_2d_planned!(out2d, work, plan_fwd, plan_inv, data[k, :, :], H)
+                out[k, :, :] .= out2d
             end
             return out
         else
