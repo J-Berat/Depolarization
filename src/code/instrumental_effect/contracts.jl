@@ -41,6 +41,7 @@ function validate_instrumental_config!(cfg::InstrumentalConfig)
     cfg.νmax_MHz >= cfg.νmin_MHz || error("cfg.νmax_MHz must be >= cfg.νmin_MHz")
     cfg.ichan >= 1 || error("cfg.ichan must be >= 1, got $(cfg.ichan)")
     cfg.iphi >= 1 || error("cfg.iphi must be >= 1, got $(cfg.iphi)")
+    cfg.los in ("x", "y", "z") || error("cfg.los must be one of x/y/z, got $(cfg.los)")
     return true
 end
 

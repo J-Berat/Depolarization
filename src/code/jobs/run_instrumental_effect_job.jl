@@ -52,6 +52,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         By_in = by_in,
         Bz_in = bz_in,
         dens_in = dens_in,
+        los = los,
         Llarge_list = llarge_list,
     )
 
@@ -61,6 +62,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         run_q_u_p_q2 = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_q_u_p_q2"]; default=true)),
         run_phi_q_u_p = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_phi_q_u_p"]; default=true)),
         run_lic = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_lic"]; default=false)),
+        run_channel_b_alignment = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_channel_b_alignment"]; default=true)),
     )
 
     data = run_pipeline(run_cfg; flags=flags)
@@ -78,6 +80,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
             "run_q_u_p_q2" => flags.run_q_u_p_q2,
             "run_phi_q_u_p" => flags.run_phi_q_u_p,
             "run_lic" => flags.run_lic,
+            "run_channel_b_alignment" => flags.run_channel_b_alignment,
         ),
     )
 end

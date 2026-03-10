@@ -750,6 +750,499 @@ function _validate_phi_cubes(cfg::InstrumentalConfig, data::FilterPassResult, Qp
     return true
 end
 
+const _ALIGNMENT_ANGLE_TOL_DEG = 15.0
+const _ALIGNMENT_MAP_ENTRY = NamedTuple{(:map_tag, :llarge_eff_pc, :Pmap), Tuple{String, Float64, Matrix{Float64}}}
+const _ALIGNMENT_ROW = NamedTuple{
+    (:map_tag, :llarge_eff_pc, :reference, :npix,
+     :mean_abs_delta_deg, :median_abs_delta_deg,
+     :frac_parallel_15deg, :frac_perp_15deg, :median_perp_offset_deg),
+    Tuple{String, Float64, String, Int, Float64, Float64, Float64, Float64, Float64},
+}
+
+"""
+    _finite_quantile(...)
+
+Returns a robust quantile over finite values only.
+"""
+function _finite_quantile(A, q::Real)
+    0.0 <= q <= 1.0 || error("q must be in [0,1], got $q")
+    vals = vec(Float64.(A))
+    vals = vals[isfinite.(vals)]
+    isempty(vals) && return NaN
+    return quantile(vals, q)
+end
+
+@inline _wrap_orientation_pi(θ::Real) = mod(float(θ), π)
+
+@inline function _line_orientation_delta_deg(θa::Real, θb::Real)
+    Δ = mod((float(θa) - float(θb)) + (π / 2), π) - (π / 2)
+    return rad2deg(Δ)
+end
+
+"""
+    _gradients_central(...)
+
+Central (interior) + one-sided (boundary) finite differences.
+"""
+function _gradients_central(A::AbstractMatrix, Δx::Real, Δy::Real)
+    n, m = size(A)
+    n >= 2 || error("Need n>=2 to compute gradients, got n=$n")
+    m >= 2 || error("Need m>=2 to compute gradients, got m=$m")
+    isfinite(Δx) && Δx > 0 || error("Δx must be positive finite, got $Δx")
+    isfinite(Δy) && Δy > 0 || error("Δy must be positive finite, got $Δy")
+
+    gx = Matrix{Float64}(undef, n, m)
+    gy = Matrix{Float64}(undef, n, m)
+
+    invdx = inv(float(Δx))
+    invdy = inv(float(Δy))
+    inv2dx = inv(2.0 * float(Δx))
+    inv2dy = inv(2.0 * float(Δy))
+
+    @inbounds for j in 1:m
+        gx[1, j] = (A[2, j] - A[1, j]) * invdx
+        for i in 2:(n - 1)
+            gx[i, j] = (A[i + 1, j] - A[i - 1, j]) * inv2dx
+        end
+        gx[n, j] = (A[n, j] - A[n - 1, j]) * invdx
+    end
+
+    @inbounds for i in 1:n
+        gy[i, 1] = (A[i, 2] - A[i, 1]) * invdy
+        for j in 2:(m - 1)
+            gy[i, j] = (A[i, j + 1] - A[i, j - 1]) * inv2dy
+        end
+        gy[i, m] = (A[i, m] - A[i, m - 1]) * invdy
+    end
+
+    return gx, gy
+end
+
+"""
+    _hessian_components(...)
+
+Builds Hessian components from finite differences.
+"""
+function _hessian_components(A::AbstractMatrix, Δx::Real, Δy::Real)
+    gx, gy = _gradients_central(A, Δx, Δy)
+    fxx, fxy1 = _gradients_central(gx, Δx, Δy)
+    fxy2, fyy = _gradients_central(gy, Δx, Δy)
+    fxy = 0.5 .* (fxy1 .+ fxy2)
+    return fxx, fxy, fyy, gx, gy
+end
+
+"""
+    _orientation_map_from_components(...)
+
+Converts vector components to line orientation in `[0,π)`.
+"""
+function _orientation_map_from_components(vx::AbstractMatrix, vy::AbstractMatrix)
+    size(vx) == size(vy) || error("Component size mismatch: vx=$(size(vx)) vy=$(size(vy))")
+    n, m = size(vx)
+    θ = fill(NaN, n, m)
+    @inbounds for j in 1:m, i in 1:n
+        ax = vx[i, j]
+        ay = vy[i, j]
+        if isfinite(ax) && isfinite(ay) && (ax != 0 || ay != 0)
+            θ[i, j] = _wrap_orientation_pi(atan(ay, ax))
+        end
+    end
+    return θ
+end
+
+"""
+    _canal_orientation_map(...)
+
+Estimates canal tangent orientation from local curvature (Hessian).
+"""
+function _canal_orientation_map(Pmap::AbstractMatrix, Δx::Real, Δy::Real)
+    P = Float64.(Pmap)
+    fxx, fxy, fyy, gx, gy = _hessian_components(P, Δx, Δy)
+
+    n, m = size(P)
+    θcanal = fill(NaN, n, m)
+    λmax = fill(NaN, n, m)
+
+    @inbounds for j in 1:m, i in 1:n
+        a = fxx[i, j]
+        b = fxy[i, j]
+        c = fyy[i, j]
+        if isfinite(a) && isfinite(b) && isfinite(c)
+            θnormal = 0.5 * atan(2.0 * b, a - c)
+            θcanal[i, j] = _wrap_orientation_pi(θnormal + (π / 2))
+            disc = sqrt((a - c)^2 + 4.0 * b^2)
+            λmax[i, j] = 0.5 * (a + c + disc)
+        end
+    end
+
+    gmag = hypot.(gx, gy)
+    κ = abs.(λmax)
+    base_valid = isfinite.(θcanal) .& isfinite.(P) .& isfinite.(κ) .& isfinite.(gmag)
+    mask = falses(size(P))
+
+    # Adaptive thresholds: strict -> relaxed, to keep enough canal pixels.
+    nmin = max(8, round(Int, 0.002 * length(P)))
+    for (qp, qk, qg) in ((0.25, 0.75, 0.60), (0.40, 0.60, 0.45), (0.55, 0.50, 0.35), (0.70, 0.40, 0.25))
+        p_low = _finite_quantile(P, qp)
+        κ_high = _finite_quantile(κ, qk)
+        g_high = _finite_quantile(gmag, qg)
+        mask .= base_valid .& (P .<= p_low) .& (κ .>= κ_high) .& (gmag .>= g_high)
+        count(mask) >= nmin && break
+    end
+
+    if count(mask) == 0
+        g_med = _finite_quantile(gmag, 0.50)
+        mask .= base_valid .& (gmag .>= g_med)
+    end
+
+    return θcanal, mask, gx, gy
+end
+
+"""
+    _alignment_stats(...)
+
+Computes alignment/perpendicularity statistics on selected pixels.
+"""
+function _alignment_stats(θcanal::AbstractMatrix, θref::AbstractMatrix, mask::AbstractMatrix; tol_deg::Real=_ALIGNMENT_ANGLE_TOL_DEG)
+    size(θcanal) == size(θref) || error("Orientation size mismatch: canal=$(size(θcanal)) ref=$(size(θref))")
+    size(θcanal) == size(mask) || error("Mask size mismatch: canal=$(size(θcanal)) mask=$(size(mask))")
+
+    absd = Float64[]
+    perp = Float64[]
+    sum_abs = 0.0
+    n = 0
+    n_parallel = 0
+    n_perp = 0
+    @inbounds for j in axes(θcanal, 2), i in axes(θcanal, 1)
+        if mask[i, j]
+            a = θcanal[i, j]
+            b = θref[i, j]
+            if isfinite(a) && isfinite(b)
+                d = abs(_line_orientation_delta_deg(a, b))
+                p = abs(d - 90.0)
+                push!(absd, d)
+                push!(perp, p)
+                sum_abs += d
+                n += 1
+                n_parallel += d <= tol_deg
+                n_perp += p <= tol_deg
+            end
+        end
+    end
+
+    n == 0 && return (
+        npix=0,
+        mean_abs_delta_deg=NaN,
+        median_abs_delta_deg=NaN,
+        frac_parallel_tol=NaN,
+        frac_perp_tol=NaN,
+        median_perp_offset_deg=NaN,
+    )
+
+    return (
+        npix=n,
+        mean_abs_delta_deg=sum_abs / n,
+        median_abs_delta_deg=median(absd),
+        frac_parallel_tol=n_parallel / n,
+        frac_perp_tol=n_perp / n,
+        median_perp_offset_deg=median(perp),
+    )
+end
+
+"""
+    _project_cube_mean(...)
+
+LOS-average projection with map-shape reconciliation.
+"""
+function _project_cube_mean(cube, los::String, target_size::Tuple{Int,Int})
+    ndims(cube) == 3 || error("Expected 3D cube for LOS projection, got ndims=$(ndims(cube)) size=$(size(cube))")
+    los in ("x", "y", "z") || error("LOS must be x/y/z, got $los")
+
+    dim = los == "x" ? 1 : (los == "y" ? 2 : 3)
+    proj = dropdims(mean(Float64.(cube); dims=dim), dims=dim)
+
+    if size(proj) == target_size
+        return Matrix{Float64}(proj)
+    end
+
+    proj_t = permutedims(proj, (2, 1))
+    if size(proj_t) == target_size
+        return Matrix{Float64}(proj_t)
+    end
+
+    error("Projected map has size $(size(proj)) (or transposed $(size(proj_t))), expected $target_size")
+end
+
+"""
+    _project_bperp_maps(...)
+
+Projects magnetic field onto the sky plane according to LOS.
+"""
+function _project_bperp_maps(cfg::InstrumentalConfig)
+    Bx = read_FITS(cfg.Bx_in)
+    By = read_FITS(cfg.By_in)
+    Bz = read_FITS(cfg.Bz_in)
+
+    ndims(Bx) == 3 || error("Bx must be 3D, got size=$(size(Bx))")
+    ndims(By) == 3 || error("By must be 3D, got size=$(size(By))")
+    ndims(Bz) == 3 || error("Bz must be 3D, got size=$(size(Bz))")
+    size(Bx) == size(By) || error("Bx/By shape mismatch: Bx=$(size(Bx)) By=$(size(By))")
+    size(By) == size(Bz) || error("By/Bz shape mismatch: By=$(size(By)) Bz=$(size(Bz))")
+
+    target = (cfg.n, cfg.m)
+
+    if cfg.los == "x"
+        b1 = _project_cube_mean(By, "x", target)
+        b2 = _project_cube_mean(Bz, "x", target)
+    elseif cfg.los == "y"
+        b1 = _project_cube_mean(Bx, "y", target)
+        b2 = _project_cube_mean(Bz, "y", target)
+    else
+        b1 = _project_cube_mean(Bx, "z", target)
+        b2 = _project_cube_mean(By, "z", target)
+    end
+
+    return b1, b2
+end
+
+"""
+    _cube_to_n_m_phi(...)
+
+Normalizes FDF cube layout to `(n,m,nphi)`.
+"""
+function _cube_to_n_m_phi(cube, n::Int, m::Int, nphi::Int, label::AbstractString)
+    ndims(cube) == 3 || error("$label must be 3D, got ndims=$(ndims(cube)) size=$(size(cube))")
+    sz = size(cube)
+    if sz == (n, m, nphi)
+        return Float64.(cube)
+    elseif sz == (nphi, n, m)
+        return permutedims(Float64.(cube), (2, 3, 1))
+    end
+    error("$label must have shape (n,m,nphi)=($n,$m,$nphi) or (nphi,n,m)=($nphi,$n,$m), got size=$sz")
+end
+
+"""
+    _phi_peak_map(...)
+
+Computes per-pixel Faraday-depth peak location.
+"""
+function _phi_peak_map(Qphi_cube, Uphi_cube, PhiArray::AbstractVector, n::Int, m::Int)
+    nphi = length(PhiArray)
+    Q3 = _cube_to_n_m_phi(Qphi_cube, n, m, nphi, "realFDF")
+    U3 = _cube_to_n_m_phi(Uphi_cube, n, m, nphi, "imagFDF")
+
+    phi_peak = Matrix{Float64}(undef, n, m)
+    @inbounds for j in 1:m, i in 1:n
+        kbest = 0
+        vmax = -Inf
+        for k in 1:nphi
+            qv = Q3[i, j, k]
+            uv = U3[i, j, k]
+            if isfinite(qv) && isfinite(uv)
+                av = hypot(qv, uv)
+                if av > vmax
+                    vmax = av
+                    kbest = k
+                end
+            end
+        end
+        phi_peak[i, j] = kbest == 0 ? NaN : Float64(PhiArray[kbest])
+    end
+    return phi_peak
+end
+
+"""
+    _write_channel_alignment_csv(...)
+
+Writes alignment summary table.
+"""
+function _write_channel_alignment_csv(path::AbstractString, rows::AbstractVector{<:NamedTuple})
+    open(path, "w") do io
+        println(io, "map_tag,llarge_eff_pc,reference,npix,mean_abs_delta_deg,median_abs_delta_deg,frac_parallel_15deg,frac_perp_15deg,median_perp_offset_deg")
+        for r in rows
+            println(io, @sprintf(
+                "%s,%.6f,%s,%d,%.6f,%.6f,%.6f,%.6f,%.6f",
+                r.map_tag,
+                r.llarge_eff_pc,
+                r.reference,
+                r.npix,
+                r.mean_abs_delta_deg,
+                r.median_abs_delta_deg,
+                r.frac_parallel_15deg,
+                r.frac_perp_15deg,
+                r.median_perp_offset_deg,
+            ))
+        end
+    end
+    return path
+end
+
+"""
+    _plot_channel_alignment_summary(...)
+
+Plots alignment trends versus filter scale.
+"""
+function _plot_channel_alignment_summary(cfg::InstrumentalConfig, rows::AbstractVector{<:NamedTuple})
+    refs = ("B_perp", "grad_phi", "grad_P")
+    ref_labels = Dict(
+        "B_perp" => LaTeXString("B_{\\perp}"),
+        "grad_phi" => LaTeXString("\\nabla\\phi"),
+        "grad_P" => LaTeXString("\\nabla P"),
+    )
+    ref_colors = Dict("B_perp" => :dodgerblue3, "grad_phi" => :darkorange2, "grad_P" => :seagreen3)
+
+    with_theme(theme_latexfonts()) do
+        set_theme_spectra!()
+
+        fig = Figure(size=(2100, 900), figure_padding=30)
+        ax_frac = Axis(fig[1, 1],
+            xlabel=LaTeXString("L_{\\mathrm{large,eff}}\\,[\\mathrm{pc}]"),
+            ylabel=LaTeXString("f\\left(|\\Delta\\theta-90^\\circ|\\leq15^\\circ\\right)"),
+        )
+        ax_off = Axis(fig[1, 2],
+            xlabel=LaTeXString("L_{\\mathrm{large,eff}}\\,[\\mathrm{pc}]"),
+            ylabel=LaTeXString("\\mathrm{median}\\left(|\\Delta\\theta-90^\\circ|\\right)\\,[^\\circ]"),
+        )
+
+        handles = Any[]
+        labels = Any[]
+        x_all = Float64[]
+
+        for ref in refs
+            pts_ref = [r for r in rows if r.reference == ref]
+            pts_filt = [r for r in pts_ref if r.map_tag != "nofilter" && isfinite(r.llarge_eff_pc)]
+            sort!(pts_filt; by=r -> r.llarge_eff_pc)
+
+            x_frac = Float64[]
+            y_frac = Float64[]
+            x_off = Float64[]
+            y_off = Float64[]
+            for r in pts_filt
+                if isfinite(r.frac_perp_15deg)
+                    push!(x_frac, r.llarge_eff_pc)
+                    push!(y_frac, r.frac_perp_15deg)
+                end
+                if isfinite(r.median_perp_offset_deg)
+                    push!(x_off, r.llarge_eff_pc)
+                    push!(y_off, r.median_perp_offset_deg)
+                end
+            end
+
+            if !isempty(x_frac)
+                li = lines!(ax_frac, x_frac, y_frac; color=ref_colors[ref], linewidth=3)
+                scatter!(ax_frac, x_frac, y_frac; color=ref_colors[ref], markersize=12)
+                push!(handles, li)
+                push!(labels, ref_labels[ref])
+                append!(x_all, x_frac)
+            end
+
+            if !isempty(x_off)
+                lines!(ax_off, x_off, y_off; color=ref_colors[ref], linewidth=3)
+                scatter!(ax_off, x_off, y_off; color=ref_colors[ref], markersize=12)
+                append!(x_all, x_off)
+            end
+
+            no_idx = findfirst(r -> r.reference == ref && r.map_tag == "nofilter", rows)
+            if no_idx !== nothing
+                r0 = rows[no_idx]
+                if isfinite(r0.frac_perp_15deg)
+                    scatter!(ax_frac, [0.0], [r0.frac_perp_15deg];
+                        marker=:star5,
+                        markersize=24,
+                        color=ref_colors[ref],
+                        strokecolor=:black,
+                        strokewidth=1.5,
+                    )
+                    push!(x_all, 0.0)
+                end
+                if isfinite(r0.median_perp_offset_deg)
+                    scatter!(ax_off, [0.0], [r0.median_perp_offset_deg];
+                        marker=:star5,
+                        markersize=24,
+                        color=ref_colors[ref],
+                        strokecolor=:black,
+                        strokewidth=1.5,
+                    )
+                    push!(x_all, 0.0)
+                end
+            end
+        end
+
+        hlines!(ax_frac, [_ALIGNMENT_ANGLE_TOL_DEG / 90.0]; color=:gray40, linestyle=:dash, linewidth=2)
+        hlines!(ax_off, [_ALIGNMENT_ANGLE_TOL_DEG]; color=:gray40, linestyle=:dash, linewidth=2)
+
+        if !isempty(handles)
+            axislegend(ax_frac, handles, labels; position=:rb, framevisible=true)
+        end
+
+        xmax = isempty(x_all) ? 1.0 : max(1.0, maximum(x_all))
+        xlims!(ax_frac, -0.5, 1.05 * xmax)
+        xlims!(ax_off, -0.5, 1.05 * xmax)
+        ylims!(ax_frac, 0.0, 1.0)
+        ylims!(ax_off, 0.0, 90.0)
+
+        ax_frac.xtickformat = (vs) -> latex_linear_tickformat(vs; digits=1)
+        ax_frac.ytickformat = (vs) -> latex_linear_tickformat(vs; digits=2)
+        ax_off.xtickformat = (vs) -> latex_linear_tickformat(vs; digits=1)
+        ax_off.ytickformat = (vs) -> latex_linear_tickformat(vs; digits=1)
+
+        out = _save_figure(cfg, fig, "channel_alignment_vs_filter.pdf")
+        display(fig)
+        return out
+    end
+end
+
+"""
+    _run_channel_b_alignment(...)
+
+Measures `Δθ = θ_canal - θ_ref` for `ref ∈ {B_perp, ∇phi, ∇P}`.
+"""
+function _run_channel_b_alignment(cfg::InstrumentalConfig, data::FilterPassResult)
+    Qphi_cube = read_FITS(cfg.Q_in_phi)
+    Uphi_cube = read_FITS(cfg.U_in_phi)
+    _validate_phi_cubes(cfg, data, Qphi_cube, Uphi_cube)
+
+    φpeak = _phi_peak_map(Qphi_cube, Uphi_cube, data.PhiArray, cfg.n, cfg.m)
+    b1, b2 = _project_bperp_maps(cfg)
+    θB = _orientation_map_from_components(b1, b2)
+
+    ∇φx, ∇φy = _gradients_central(φpeak, data.scales.Δx, data.scales.Δy)
+    θ∇φ = _orientation_map_from_components(∇φx, ∇φy)
+
+    maps = _ALIGNMENT_MAP_ENTRY[(map_tag="nofilter", llarge_eff_pc=0.0, Pmap=Float64.(data.Pmax0))]
+    for Llarge in sort(data.L_ok)
+        Leff = (cfg.Lbox_pc / cfg.n) * Llarge
+        push!(maps, (map_tag=_filter_tag(Llarge), llarge_eff_pc=Leff, Pmap=Float64.(data.Pmax_filt[Llarge])))
+    end
+
+    rows = _ALIGNMENT_ROW[]
+    for entry in maps
+        θcanal, canal_mask, ∇Px, ∇Py = _canal_orientation_map(entry.Pmap, data.scales.Δx, data.scales.Δy)
+        θ∇P = _orientation_map_from_components(∇Px, ∇Py)
+
+        for (ref_name, θref) in (("B_perp", θB), ("grad_phi", θ∇φ), ("grad_P", θ∇P))
+            stats = _alignment_stats(θcanal, θref, canal_mask; tol_deg=_ALIGNMENT_ANGLE_TOL_DEG)
+            push!(rows, (
+                map_tag=entry.map_tag,
+                llarge_eff_pc=entry.llarge_eff_pc,
+                reference=ref_name,
+                npix=stats.npix,
+                mean_abs_delta_deg=stats.mean_abs_delta_deg,
+                median_abs_delta_deg=stats.median_abs_delta_deg,
+                frac_parallel_15deg=stats.frac_parallel_tol,
+                frac_perp_15deg=stats.frac_perp_tol,
+                median_perp_offset_deg=stats.median_perp_offset_deg,
+            ))
+        end
+    end
+
+    summary_path = _write_channel_alignment_csv(joinpath(cfg.base_out, "channel_alignment_summary.csv"), rows)
+    figure_path = _plot_channel_alignment_summary(cfg, rows)
+    @info "Channel-angle alignment analysis complete" summary_path figure_path los=cfg.los
+
+    return (summary_path=summary_path, figure_path=figure_path, rows=rows)
+end
+
 """
     run_pipeline(...)
 
@@ -833,6 +1326,11 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
             peak_window=(0.12, Inf),
             inset_title=:Pphi,
             save_tag="p_phi")
+    end
+
+    if flags.run_channel_b_alignment
+        on_step(:run_channel_b_alignment)
+        _run_channel_b_alignment(cfg, data)
     end
 
     if flags.run_lic

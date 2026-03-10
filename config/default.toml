@@ -67,7 +67,18 @@ run_psd = true
 run_q_u_p_q2 = true
 run_phi_q_u_p = true
 run_lic = false
+run_channel_b_alignment = true
 llarge_list = [200.0, 180.0, 165.0, 150.0, 135.0, 120.0, 105.0, 90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0]
+
+[tasks.ne_dm_em]
+enabled = true
+lbox_pc = 50.0
+zeta = 2.5e-16
+Geff = 1.0
+phiPAH = 0.5
+XC = 1.4e-4
+overwrite = true
+save_plot = true
 
 [tasks.pmax_norm]
 simu_index = 7

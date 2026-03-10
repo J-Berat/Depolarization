@@ -10,6 +10,7 @@ Base.@kwdef struct InstrumentalConfig
     By_in::String
     Bz_in::String
     dens_in::String
+    los::String = "y"
 
     n::Int = 256
     m::Int = 256
@@ -32,7 +33,19 @@ Base.@kwdef struct RunFlags
     run_q_u_p_q2::Bool = true
     run_phi_q_u_p::Bool = true
     run_lic::Bool = false
+    run_channel_b_alignment::Bool = true
 end
+
+# Backward-compatible positional constructor kept for existing call sites/tests.
+RunFlags(run_pmax_maps::Bool, run_psd::Bool, run_q_u_p_q2::Bool, run_phi_q_u_p::Bool, run_lic::Bool) =
+    RunFlags(
+        run_pmax_maps=run_pmax_maps,
+        run_psd=run_psd,
+        run_q_u_p_q2=run_q_u_p_q2,
+        run_phi_q_u_p=run_phi_q_u_p,
+        run_lic=run_lic,
+        run_channel_b_alignment=false,
+    )
 
 """
     load_config_defaults(...)
@@ -58,6 +71,7 @@ function load_config_defaults()
         By_in = joinpath(root, "By.fits"),
         Bz_in = joinpath(root, "Bz.fits"),
         dens_in = joinpath(root, "density.fits"),
+        los = los,
     )
 end
 

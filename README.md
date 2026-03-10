@@ -105,6 +105,7 @@ julia --startup-file=no --project=. src/code/jobs/run_segmentation_pipeline_job.
 ## Main Job Entrypoints
 
 ```bash
+julia --startup-file=no --project=. src/code/jobs/run_ne_dm_em_job.jl --config config/default.toml
 julia --startup-file=no --project=. src/code/jobs/run_mach_suite.jl --config config/default.toml
 julia --startup-file=no --project=. src/code/jobs/run_reversal_transition_job.jl --config config/default.toml
 julia --startup-file=no --project=. src/code/jobs/run_segmentation_pipeline_job.jl --config config/default.toml
@@ -163,9 +164,11 @@ Run other jobs from REPL the same way:
 
 ```julia
 julia> include("src/code/jobs/run_mach_suite.jl");
+julia> include("src/code/jobs/run_ne_dm_em_job.jl");
 julia> include("src/code/jobs/run_segmentation_pipeline_job.jl");
 
 julia> run_mach_suite(cfg)                     # task = "mach"
+julia> run_ne_dm_em_job(cfg)                  # task = "ne_dm_em"
 julia> run_segmentation_pipeline_job(cfg)      # task = "segmentation"
 ```
 
@@ -182,6 +185,9 @@ Before launching a job, make sure the required inputs exist for the selected sim
 - `run_mach_suite.jl`
   - simulation cubes: `Bx.fits`, `By.fits`, `Bz.fits`, `Vx.fits`, `Vy.fits`, `Vz.fits`, `density.fits`, `temperature.fits`
   - LOS maps for both configured LOS (`tasks.mach_suite.los_y`, `tasks.mach_suite.los_x`): `Synchrotron/WithFaraday/Pmax.fits`
+- `run_ne_dm_em_job.jl`
+  - root simulation cubes: `density.fits`, `temperature.fits`
+  - writes LOS products: `Synchrotron/ne.fits`, `Synchrotron/DM.fits`, `Synchrotron/EM.fits`
 - `run_reversal_transition_job.jl`
   - LOS products: `Synchrotron/WithFaraday/Pmax.fits`, `Synchrotron/ne.fits`, `Synchrotron/WithFaraday/FDF.fits`
   - LOS magnetic cube from root simulation folder: one of `Bx.fits`, `By.fits`, `Bz.fits` (chosen from `simulation.los`)
@@ -197,6 +203,7 @@ Before launching a job, make sure the required inputs exist for the selected sim
 
 ```bash
 for job in \
+  src/code/jobs/run_ne_dm_em_job.jl \
   src/code/jobs/run_mach_suite.jl \
   src/code/jobs/run_reversal_transition_job.jl \
   src/code/jobs/run_segmentation_pipeline_job.jl \
@@ -208,6 +215,7 @@ done
 
 Task keys used by these jobs live under:
 
+- `tasks.ne_dm_em`
 - `tasks.mach_suite`
 - `tasks.reversal_transition_job`
 - `tasks.reversals_map`
@@ -219,6 +227,13 @@ Task keys used by these jobs live under:
 
 ## Job Outputs
 
+- `run_ne_dm_em_job.jl`
+  - simulation LOS folder:
+    - `<simulations_root>/<simulation>/<los>/Synchrotron/ne.fits`
+    - `<simulations_root>/<simulation>/<los>/Synchrotron/DM.fits`
+    - `<simulations_root>/<simulation>/<los>/Synchrotron/EM.fits`
+  - figure:
+    - `<outputs_root>/ne_dm_em/<simulation>/LOS<los>/..._dm_em_maps.pdf`
 - `run_mach_suite.jl`
   - `<outputs_root>/mach_suite/multi/LOS<los_y>/mach_suite_multi_LOS<los_y>_p10_scatter.pdf`
   - `<outputs_root>/mach_suite/multi/LOS<los_y>/mach_suite_multi_LOS<los_y>_fraction_scatter.pdf`
@@ -235,6 +250,9 @@ Task keys used by these jobs live under:
 - `run_instrumental_effect_job.jl`
   - per-filter folders under `<outputs_root>/instrumental_effect/<simulation>/LOS<los>/HardBandPass_*`
   - each folder writes `Qnu_filtered.fits`, `Unu_filtered.fits`, and `RMSynthesis/Pphi_max.fits`
+  - when `tasks.instrumental_effect.run_channel_b_alignment=true`:
+    - `<outputs_root>/instrumental_effect/<simulation>/LOS<los>/channel_alignment_summary.csv`
+    - `<outputs_root>/instrumental_effect/<simulation>/LOS<los>/figures/channel_alignment_vs_filter.pdf`
 
 ## Expected Input Data Layout
 
@@ -252,6 +270,8 @@ Task keys used by these jobs live under:
     <los>/
       Synchrotron/
         ne.fits
+        DM.fits
+        EM.fits
         WithFaraday/
           Pmax.fits
           Qnu.fits

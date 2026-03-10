@@ -29,6 +29,10 @@ function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=fa
     pmax_path = joinpath(td, "Pmax.fits")
     qphi_path = joinpath(td, "realFDF.fits")
     uphi_path = joinpath(td, "imagFDF.fits")
+    bx_path = joinpath(td, "Bx.fits")
+    by_path = joinpath(td, "By.fits")
+    bz_path = joinpath(td, "Bz.fits")
+    dens_path = joinpath(td, "density.fits")
 
     q_shape = bad_layout ? (4, 4, 3) : (4, 4, 4)
     _write_basic_fits(q_path, randn(Float32, q_shape...))
@@ -40,6 +44,10 @@ function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=fa
     _write_basic_fits(pmax_path, pmax)
     _write_basic_fits(qphi_path, randn(Float32, 4, 4, 3))
     _write_basic_fits(uphi_path, randn(Float32, 4, 4, 3))
+    _write_basic_fits(bx_path, randn(Float32, 4, 4, 4))
+    _write_basic_fits(by_path, randn(Float32, 4, 4, 4))
+    _write_basic_fits(bz_path, randn(Float32, 4, 4, 4))
+    _write_basic_fits(dens_path, rand(Float32, 4, 4, 4))
 
     return InstrumentalConfig(
         Q_in=q_path,
@@ -48,10 +56,11 @@ function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=fa
         Q_in_phi=qphi_path,
         U_in_phi=uphi_path,
         base_out=joinpath(td, "out"),
-        Bx_in=joinpath(td, "Bx.fits"),
-        By_in=joinpath(td, "By.fits"),
-        Bz_in=joinpath(td, "Bz.fits"),
-        dens_in=joinpath(td, "density.fits"),
+        Bx_in=bx_path,
+        By_in=by_path,
+        Bz_in=bz_path,
+        dens_in=dens_path,
+        los="y",
         n=4,
         m=4,
         Lbox_pc=4.0,
@@ -175,6 +184,34 @@ end
                 @test err isa _StopPipeline
                 @test err.step == :run_pmax_maps
                 @test steps == [:filter_pass, :run_pmax_maps]
+            end
+        end
+
+        @testset "channel-angle section enabled writes outputs" begin
+            mktempdir() do td
+                cfg = _make_minimal_cfg(td)
+                steps = Symbol[]
+                flags = RunFlags(
+                    run_pmax_maps=false,
+                    run_psd=false,
+                    run_q_u_p_q2=false,
+                    run_phi_q_u_p=false,
+                    run_lic=false,
+                    run_channel_b_alignment=true,
+                )
+
+                result = _with_rm_progress_disabled() do
+                    run_pipeline(cfg; flags=flags, on_step=step -> push!(steps, step))
+                end
+
+                @test result isa InstrumentalEffect.FilterPassResult
+                @test steps == [:filter_pass, :run_channel_b_alignment]
+                @test isfile(joinpath(cfg.base_out, "channel_alignment_summary.csv"))
+                @test isfile(joinpath(cfg.base_out, "figures", "channel_alignment_vs_filter.pdf"))
+
+                csv = read(joinpath(cfg.base_out, "channel_alignment_summary.csv"), String)
+                @test occursin("reference", csv)
+                @test occursin("B_perp", csv)
             end
         end
     end
