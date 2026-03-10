@@ -12,6 +12,7 @@ export DEFAULT_CONFIG_PATH,
        require_los, los_axis, axis_pc, ticks_pc,
        read_FITS, write_FITS, los_config, smooth_moving_average, sign_eps, reversal_indices,
        read_fits_f32, require_ndims, require_same_size,
+       Wolfire_ne, dm_em_maps,
        finite_values, finite_minmax,
        resolve_simulations_root, require_existing_files,
        task_enabled, skipped_job_result, run_job_entrypoint,
@@ -274,6 +275,42 @@ function require_same_size(arrays::AbstractVector, labels::AbstractVector{<:Abst
         size(arrays[i]) == s0 || error("Size mismatch: $(labels[1])=$s0, $(labels[i])=$(size(arrays[i]))")
     end
     return true
+end
+
+"""
+    Wolfire_ne(...)
+
+    Computes electron density with the Wolfire-style approximation:
+
+    `ne = 2.4e-3*sqrt(zeta/1e-16)*(T/100)^0.25*sqrt(Geff)/omegaPAH + n*XC`.
+"""
+function Wolfire_ne(zeta::Real, Geff::Real, omegaPAH::Real, XC::Real, T::AbstractArray, n::AbstractArray)
+    zeta > 0 || error("zeta must be > 0, got $zeta")
+    Geff > 0 || error("Geff must be > 0, got $Geff")
+    omegaPAH > 0 || error("omegaPAH must be > 0, got $omegaPAH")
+    require_same_size([T, n], ["T", "n"])
+
+    return @. 2.4e-3 * sqrt(zeta / 1e-16) * (T / 100)^0.25 * sqrt(Geff) / omegaPAH + n * XC
+end
+
+"""
+    dm_em_maps(...)
+
+    Integrates a 3D `ne` cube along LOS to build:
+    - `DM = ∫ ne dl` [pc cm^-3]
+    - `EM = ∫ ne^2 dl` [pc cm^-6]
+
+    Returns `(dm_map, em_map, dl_pc)`.
+"""
+function dm_em_maps(ne::AbstractArray{<:Real,3}, los::AbstractString; lbox_pc::Real=50.0)
+    ax = los_axis(los)
+    nlos = size(ne, ax)
+    nlos > 0 || error("LOS size must be positive, got $nlos")
+    dl_pc = nlos > 1 ? Float64(lbox_pc) / (nlos - 1) : Float64(lbox_pc)
+
+    dm = dropdims(sum(ne; dims=ax); dims=ax) .* dl_pc
+    em = dropdims(sum(abs2, ne; dims=ax); dims=ax) .* dl_pc
+    return dm, em, dl_pc
 end
 
 """

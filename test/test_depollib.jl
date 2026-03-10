@@ -91,6 +91,29 @@ using Test
         @test_throws ErrorException require_same_size([A, ones(3, 3)], ["A", "B"])
     end
 
+    @testset "Wolfire ne and LOS DM/EM maps" begin
+        T = fill(Float32(100.0), 2, 2, 2)
+        n = fill(Float32(10.0), 2, 2, 2)
+
+        ne = Wolfire_ne(2.5e-16, 1.0, 0.5, 1.4e-4, T, n)
+        expected_ne = 2.4e-3 * sqrt(2.5e-16 / 1e-16) * (100.0 / 100.0)^0.25 * sqrt(1.0) / 0.5 + 10.0 * 1.4e-4
+        @test all(isapprox.(ne, expected_ne; rtol=1e-6, atol=0.0))
+
+        dm_x, em_x, dl_x = dm_em_maps(ne, "x"; lbox_pc=50.0)
+        @test size(dm_x) == (2, 2)
+        @test size(em_x) == (2, 2)
+        @test dl_x == 50.0
+        @test all(isapprox.(dm_x, 2 * expected_ne * 50.0; rtol=1e-6, atol=0.0))
+        @test all(isapprox.(em_x, 2 * expected_ne^2 * 50.0; rtol=1e-6, atol=0.0))
+
+        dm_z, em_z, dl_z = dm_em_maps(ne, "z"; lbox_pc=100.0)
+        @test size(dm_z) == (2, 2)
+        @test size(em_z) == (2, 2)
+        @test dl_z == 100.0
+        @test all(isapprox.(dm_z, 2 * expected_ne * 100.0; rtol=1e-6, atol=0.0))
+        @test all(isapprox.(em_z, 2 * expected_ne^2 * 100.0; rtol=1e-6, atol=0.0))
+    end
+
     @testset "path + orchestration helpers" begin
         root = "/tmp/simroot"
         @test simulation_dir(root, "sim01") == "/tmp/simroot/sim01"
