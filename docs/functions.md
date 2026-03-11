@@ -9,31 +9,7 @@ To regenerate:
 ```
 
 ## src/code/common.jl
-- `load_runtime_config(...)`
-- `cfg_get(...)`
-- `cfg_require(...)`
-- `require_los(...)`
-- `los_axis(...)`
-- `axis_pc(...)`
-- `ticks_pc(...)`
-- `read_intervals_from_csv(...)`
-- `merge_intervals(...)`
-- `normalize_task_name(...)`
-- `standard_output_dir(...)`
-- `standard_output_path(...)`
-- `finite_values(...)`
-- `finite_minmax(...)`
-- `resolve_simulations_root(...)`
-- `require_existing_files(...)`
-- `read_fits_f32(...)`
-- `require_ndims(...)`
-- `require_same_size(...)`
-- `read_FITS(...)`
-- `write_FITS(...)`
-- `los_config(...)`
-- `smooth_moving_average(...)`
-- `sign_eps(...)`
-- `reversal_indices(...)`
+- No top-level function definitions.
 
 ## src/code/fits_io.jl
 - `read_FITS(...)`
@@ -67,22 +43,59 @@ To regenerate:
 - `Llabel_pc(...)`
 - `print_progress(...)`
 - `RMSynthesis(...)`
+- `RMSynthesis_pmax_map(...)`
 - `getRMSF(...)`
 
 ## src/code/instrumental_effect/pipeline.jl
-- `_filter_tag(...)`
-- `_robust_colorrange(...)`
-- `_collect_series(...)`
-- `_rm_log_progress_enabled(...)`
-- `_validate_filter_inputs(...)`
+- No top-level function definitions.
+
+## src/code/instrumental_effect/pipeline/channel_alignment.jl
+- `_finite_quantile(...)`
+- `_gradients_central(...)`
+- `_hessian_components(...)`
+- `_orientation_map_from_components(...)`
+- `_orientation_map_bperp_from_b1_b2(...)`
+- `_canal_orientation_map(...)`
+- `_alignment_deltas_deg(...)`
+- `_alignment_stats_from_deltas(...)`
+- `_alignment_stats(...)`
+- `_project_cube_mean(...)`
+- `_project_hypot_mean(...)`
+- `_project_bperp_maps(...)`
+- `_phi_peak_map(...)`
+- `_write_channel_alignment_csv(...)`
+- `_kde_bandwidth(...)`
+- `_kde_curve_density(...)`
+- `_plot_delta_theta_histograms(...)`
+- `_run_channel_b_alignment(...)`
+
+## src/code/instrumental_effect/pipeline/filter_pass.jl
 - `_process_single_filter(...)`
 - `run_filter_pass(...)`
+
+## src/code/instrumental_effect/pipeline/helpers.jl
+- `_filter_tag(...)`
+- `_save_figure(...)`
+- `_robust_colorrange(...)`
+- `_collect_series(...)`
+- `_select_display_filters(...)`
+- `_cycled_curve_colors(...)`
+- `_rm_log_progress_enabled(...)`
+
+## src/code/instrumental_effect/pipeline/integrity.jl
+- `_integrity_push_check!(...)`
+- `_write_integrity_report(...)`
+- `_validate_filter_inputs(...)`
+
+## src/code/instrumental_effect/pipeline/plots.jl
 - `_plot_pmax_maps(...)`
 - `_plot_psd_panels(...)`
 - `_plot_pmax_kx(...)`
 - `_plot_component_spectrum(...)`
 - `_build_filtered_dict_from_slice(...)`
 - `_validate_phi_cubes(...)`
+
+## src/code/instrumental_effect/pipeline/run_pipeline.jl
 - `run_pipeline(...)`
 
 ## src/code/instrumental_effect/plotting.jl
@@ -107,6 +120,19 @@ To regenerate:
 - `psd1d_x_mean_over_y(...)`
 - `kpeak_in_window(...)`
 
+## src/code/jobs/run_canal_metrics_job.jl
+- `_sky_plane_labels(...)`
+- `_bparallel_from_components(...)`
+- `_cb_map(...)`
+- `_cphi_map(...)`
+- `_ab_map(...)`
+- `_nrev_map(...)`
+- `_canal_mask(...)`
+- `_pdf_hist!(...)`
+- `_binned_stats(...)`
+- `_bin2d_median(...)`
+- `run_canal_metrics_job(...)`
+
 ## src/code/jobs/run_instrumental_effect_job.jl
 - `run_instrumental_effect_job(...)`
 
@@ -118,12 +144,26 @@ To regenerate:
 - `compute_ms_ma(...)`
 - `run_mach_suite(...)`
 
+## src/code/jobs/run_ne_dm_em_job.jl
+- `_sky_plane_labels(...)`
+- `_safe_colorrange(...)`
+- `_pc_ticks(...)`
+- `_plot_dm_em_maps(...)`
+- `_plot_measure_heatmap(...)`
+- `ask_user(...)`
+- `resolve_wolfire_constants(...)`
+- `run_ne_dm_em_job(...)`
+
 ## src/code/jobs/run_reversal_transition_job.jl
 - `first_derivative(...)`
 - `count_reversals_in_window(...)`
 - `tight_bounds_for_reversal(...)`
 - `merge_intervals_local(...)`
 - `extract_fdf_spectrum(...)`
+- `resolve_phi_array(...)`
+- `infer_nphi_from_fdf(...)`
+- `compute_reversal_windows(...)`
+- `plot_profile_with_windows!(...)`
 - `run_reversal_transition_job(...)`
 
 ## src/code/jobs/run_segmentation_pipeline_job.jl
@@ -132,6 +172,18 @@ To regenerate:
 - `run_segmentation_pipeline_job(...)`
 
 ## src/code/lib/DepolLib.jl
+- `_resolve_help_topic(...)`
+- `_print_help_setup(...)`
+- `_print_help_job(...)`
+- `_print_help_jobs(...)`
+- `_print_help_order(...)`
+- `_print_help_cli_overrides(...)`
+- `_print_help_cli_commands(...)`
+- `_print_help_run_all(...)`
+- `_known_help_topics(...)`
+- `help(...)`
+- `depol_help(...)`
+- `repl_help(...)`
 - `_parse_scalar(...)`
 - `_set_nested!(...)`
 - `_parse_cli_args(...)`
@@ -149,6 +201,8 @@ To regenerate:
 - `read_fits_f32(...)`
 - `require_ndims(...)`
 - `require_same_size(...)`
+- `Wolfire_ne(...)`
+- `dm_em_maps(...)`
 - `finite_values(...)`
 - `finite_minmax(...)`
 - `resolve_simulations_root(...)`
@@ -165,6 +219,7 @@ To regenerate:
 - `read_intervals_from_csv(...)`
 - `merge_intervals(...)`
 - `normalize_task_name(...)`
+- `_resolve_output_root(...)`
 - `standard_output_dir(...)`
 - `standard_output_path(...)`
 - `run_script_with_same_config(...)`

@@ -1,6 +1,6 @@
 [paths]
 simulations_root = "/Users/jb270005/Desktop/simu_RAMSES"
-outputs_root = "./outputs"
+desktop_output_root = "./outputs"
 transitions_csv_root = "./data/transitions"
 
 [simulation]
@@ -17,18 +17,6 @@ overwrite = true
 [tasks.make_chunk]
 chunk_size = 32
 
-[tasks.grad_p]
-nu_min_hz = 120000000.0
-nu_max_hz = 167000000.0
-dnu_hz = 98000.0
-k_plot = 10
-save_cubes = true
-
-[tasks.spectral_index]
-nu0_hz = 120000000.0
-dnu_hz = 98000.0
-lbox_pc = 50.0
-
 [tasks.reversals_map]
 npix = 256
 lbox_pc = 50.0
@@ -41,22 +29,25 @@ lbox_pc = 50.0
 b_scale = 1000.0
 nphi = 81
 
-[tasks.histogram_deciles]
-npix = 256
-lbox_pc = 50.0
-
-[tasks.structure_functionb_1d]
-lbox_pc = 50.0
-i_map = 30
-j_map = 128
-maxlag = 120
-
 [tasks.mach_suite]
 los_y = "y"
 los_x = "x"
 
 [tasks.reversal_transition_job]
 enabled = true
+
+[tasks.canal_metrics]
+enabled = true
+decile = 0.1
+b_unit_factor = 1000.0
+lbox_pc = 50.0
+nrev_thresh = 0.0
+nbins_pdf = 60
+nbins_nrev = 30
+nbins_stats = 30
+nbins_matrix_x = 35
+nbins_matrix_y = 35
+mincount = 10
 
 [tasks.segmentation_pipeline_job]
 enabled = true
@@ -68,33 +59,24 @@ run_q_u_p_q2 = true
 run_phi_q_u_p = true
 run_lic = false
 run_channel_b_alignment = true
-llarge_list = [200.0, 180.0, 165.0, 150.0, 135.0, 120.0, 105.0, 90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0]
+channel_alignment_pdf_plain = true
+llarge_list = [200.0, 100.0, 50.0, 20.0]
 
 [tasks.ne_dm_em]
 enabled = true
+prompt_constants = true
 lbox_pc = 50.0
+pc_to_cm = 3.085677581491367e18
 zeta = 2.5e-16
 Geff = 1.0
 phiPAH = 0.5
 XC = 1.4e-4
 overwrite = true
 save_plot = true
-
-[tasks.pmax_norm]
-simu_index = 7
-los = "y"
-
-[tasks.b_orientation_cube]
-los = "y"
-
-[tasks.ne_b_correlation]
-what = "rF"
-
-[tasks.polarization_degree]
-los = "y"
-
-[tasks.pmax_deciles_mean_spectra]
-out_ext = "pdf"
-
-[tasks.vorticity_compressibility_canals]
-lbox_pc = 50.0
+title_size = 44
+label_size = 36
+tick_size = 30
+tick_step_pc = 10.0
+cbar_label_size = 44
+cbar_tick_size = 36
+cbar_width = 60

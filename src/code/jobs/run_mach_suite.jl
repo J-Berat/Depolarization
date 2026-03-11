@@ -39,16 +39,16 @@ rho(n) = (1.27 * 1.6735575e-24) .* n
     Computes mean sonic and Alfven Mach numbers.
 """
 function compute_ms_ma(root::String, sim::String)
-    n = read_fits_f32(simulation_field_path(root, sim, "density"))
-    T = read_fits_f32(simulation_field_path(root, sim, "temperature"))
+    n = DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "density"))
+    T = DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "temperature"))
 
-    Bx = read_fits_f32(simulation_field_path(root, sim, "Bx")) .* 1f-3
-    By = read_fits_f32(simulation_field_path(root, sim, "By")) .* 1f-3
-    Bz = read_fits_f32(simulation_field_path(root, sim, "Bz")) .* 1f-3
+    Bx = DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "Bx")) .* 1f-3
+    By = DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "By")) .* 1f-3
+    Bz = DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "Bz")) .* 1f-3
 
-    Vx = to_cgs(read_fits_f32(simulation_field_path(root, sim, "Vx")))
-    Vy = to_cgs(read_fits_f32(simulation_field_path(root, sim, "Vy")))
-    Vz = to_cgs(read_fits_f32(simulation_field_path(root, sim, "Vz")))
+    Vx = to_cgs(DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "Vx")))
+    Vy = to_cgs(DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "Vy")))
+    Vz = to_cgs(DepolLib.read_fits_f32(DepolLib.simulation_field_path(root, sim, "Vz")))
 
     vmag = sqrt.(Vx.^2 .+ Vy.^2 .+ Vz.^2)
     Ms = mean(vmag ./ cs(T))
@@ -66,27 +66,27 @@ end
     Runs full Mach-suite workflow and writes plots + summary CSV.
 """
 function run_mach_suite(cfg)::Dict{String,Any}
-    root = resolve_simulations_root(cfg)
-    los_y = require_los(string(cfg_get(cfg, ["tasks", "mach_suite", "los_y"]; default="y")))
-    los_x = require_los(string(cfg_get(cfg, ["tasks", "mach_suite", "los_x"]; default="x")))
+    root = DepolLib.resolve_simulations_root(cfg)
+    los_y = DepolLib.require_los(string(DepolLib.cfg_get(cfg, ["tasks", "mach_suite", "los_y"]; default="y")))
+    los_x = DepolLib.require_los(string(DepolLib.cfg_get(cfg, ["tasks", "mach_suite", "los_x"]; default="x")))
 
-    sims = default_simulation_list()
+    sims = DepolLib.default_simulation_list()
     required_files = String[]
     for sim in sims
-        push!(required_files, withfaraday_path(root, sim, los_y, "Pmax.fits"))
-        push!(required_files, withfaraday_path(root, sim, los_x, "Pmax.fits"))
+        push!(required_files, DepolLib.withfaraday_path(root, sim, los_y, "Pmax.fits"))
+        push!(required_files, DepolLib.withfaraday_path(root, sim, los_x, "Pmax.fits"))
         for field in ("density", "temperature", "Bx", "By", "Bz", "Vx", "Vy", "Vz")
-            push!(required_files, simulation_field_path(root, sim, field))
+            push!(required_files, DepolLib.simulation_field_path(root, sim, field))
         end
     end
-    require_existing_files(required_files; context="mach_suite")
+    DepolLib.require_existing_files(required_files; context="mach_suite")
 
     pth_y_vals = Float32[]
     pth_x_vals = Float32[]
     pmax_finite = Dict{String,Tuple{Vector{Float32},Vector{Float32}}}()
     for sim in sims
-        vy = finite_values(read_fits_f32(withfaraday_path(root, sim, los_y, "Pmax.fits")))
-        vx = finite_values(read_fits_f32(withfaraday_path(root, sim, los_x, "Pmax.fits")))
+        vy = DepolLib.finite_values(DepolLib.read_fits_f32(DepolLib.withfaraday_path(root, sim, los_y, "Pmax.fits")))
+        vx = DepolLib.finite_values(DepolLib.read_fits_f32(DepolLib.withfaraday_path(root, sim, los_x, "Pmax.fits")))
         pmax_finite[sim] = (vy, vx)
         append!(pth_y_vals, vy)
         append!(pth_x_vals, vx)
@@ -122,9 +122,9 @@ function run_mach_suite(cfg)::Dict{String,Any}
         "72000" => :firebrick,
     )
 
-    p10_plot = standard_output_path(cfg, "mach_suite", "p10_scatter", "pdf"; simu="multi", los=los_y)
-    frac_plot = standard_output_path(cfg, "mach_suite", "fraction_scatter", "pdf"; simu="multi", los=los_y)
-    summary_csv = standard_output_path(cfg, "mach_suite", "summary", "csv"; simu="multi", los=los_y)
+    p10_plot = DepolLib.standard_output_path(cfg, "mach_suite", "p10_scatter", "pdf"; simu="multi", los=los_y)
+    frac_plot = DepolLib.standard_output_path(cfg, "mach_suite", "fraction_scatter", "pdf"; simu="multi", los=los_y)
+    summary_csv = DepolLib.standard_output_path(cfg, "mach_suite", "summary", "csv"; simu="multi", los=los_y)
 
     with_theme(theme_latexfonts()) do
         fig = Figure(size=(1100, 850))
@@ -179,5 +179,5 @@ function run_mach_suite(cfg)::Dict{String,Any}
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_job_entrypoint("mach", run_mach_suite)
+    DepolLib.run_job_entrypoint("mach", run_mach_suite)
 end

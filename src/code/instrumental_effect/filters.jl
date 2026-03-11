@@ -60,7 +60,7 @@ function instrument_bandpass_L(n::Int, m::Int;
     fhi_raw = 1 / Lcut_small
     fhi = min(fhi_raw, fNy)
 
-    @debug "Filter" Lcut_small Llarge flo fhi fhi_raw
+    @debug "Band-pass filter frequencies" Lcut_small_pc=Lcut_small Llarge_pc=Llarge flo_rad_pc_inv=flo fhi_rad_pc_inv=fhi fhi_raw_rad_pc_inv=fhi_raw
 
     flo2 = flo^2
     fhi2 = fhi^2

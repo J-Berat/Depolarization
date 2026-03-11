@@ -54,6 +54,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         dens_in = dens_in,
         los = los,
         Llarge_list = llarge_list,
+        channel_alignment_pdf_plain = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "channel_alignment_pdf_plain"]; default=true)),
     )
 
     flags = RunFlags(

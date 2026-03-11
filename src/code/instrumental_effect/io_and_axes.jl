@@ -309,6 +309,91 @@ function RMSynthesis(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray,
 end
 
 """
+    RMSynthesis_pmax_map(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray, PhiArray::AbstractArray) -> Matrix{Float32}
+
+Memory-efficient RM-synthesis path that computes only `Pphi_max` without materializing
+the full `(nx, ny, nphi)` cubes.
+"""
+function RMSynthesis_pmax_map(Q::AbstractArray, U::AbstractArray, nuArray::AbstractArray, PhiArray::AbstractArray; log_progress::Bool=false)
+    length(nuArray) > 0 || error("nuArray must be non-empty")
+    length(PhiArray) > 0 || error("PhiArray must be non-empty")
+    size(Q) == size(U) || error("Q/U size mismatch: size(Q)=$(size(Q)) size(U)=$(size(U))")
+
+    log_progress && @info "Starting RM synthesis (pmax-only)" n_phi=length(PhiArray) n_lambda=length(nuArray)
+
+    LambdaSqArray = @. (C_m / Float64.(nuArray))^2
+    nPhi = length(PhiArray)
+    nLambda = length(LambdaSqArray)
+    K = 1.0 / nLambda
+    Lambda0Sq = K * sum(LambdaSqArray)
+    a = LambdaSqArray .- Lambda0Sq
+
+    layout = 0
+    nx = 0
+    ny = 0
+
+    if ndims(Q) == 3
+        if size(Q, 3) == nLambda
+            layout = 3
+            nx, ny = size(Q, 1), size(Q, 2)
+        elseif size(Q, 1) == nLambda
+            layout = 1
+            nx, ny = size(Q, 2), size(Q, 3)
+        else
+            error("3D Q/U must have frequency axis first or last matching nν=$(nLambda), got size(Q)=$(size(Q))")
+        end
+    else
+        error("RMSynthesis_pmax_map expects 3D Q/U arrays; got ndims=$(ndims(Q))")
+    end
+
+    pmax = fill(0.0, nx, ny)
+    re = zeros(Float64, nx, ny)
+    im = zeros(Float64, nx, ny)
+
+    @inbounds for i in 1:nPhi
+        fill!(re, 0.0)
+        fill!(im, 0.0)
+        phi = Float64(PhiArray[i])
+
+        for l in 1:nLambda
+            θ = -2.0 * phi * a[l]
+            c = cos(θ)
+            s = sin(θ)
+            if layout == 3
+                for y in 1:ny, x in 1:nx
+                    q = Q[x, y, l]
+                    u = U[x, y, l]
+                    re[x, y] += q * c - u * s
+                    im[x, y] += q * s + u * c
+                end
+            else
+                for y in 1:ny, x in 1:nx
+                    q = Q[l, x, y]
+                    u = U[l, x, y]
+                    re[x, y] += q * c - u * s
+                    im[x, y] += q * s + u * c
+                end
+            end
+        end
+
+        for y in 1:ny, x in 1:nx
+            amp = K * hypot(re[x, y], im[x, y])
+            if amp > pmax[x, y]
+                pmax[x, y] = amp
+            end
+        end
+
+        if log_progress
+            print_progress(i, nPhi)
+            @debug "RM synthesis pmax accumulation" idx=i total=nPhi
+        end
+    end
+
+    log_progress && @info "RM synthesis (pmax-only) complete" output_size=size(pmax)
+    return Float32.(pmax)
+end
+
+"""
     getRMSF(nuArray::AbstractArray, PhiArray::AbstractArray) -> Tuple{AbstractArray, Float64}
 
 Compute RMSF amplitude and FWHM.

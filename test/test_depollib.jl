@@ -7,7 +7,7 @@ using Test
             open(cfg_path, "w") do io
                 println(io, "[paths]")
                 println(io, "simulations_root = \"$td\"")
-                println(io, "outputs_root = \"$td/out\"")
+                println(io, "desktop_output_root = \"$td/out\"")
                 println(io, "[simulation]")
                 println(io, "name = \"simA\"")
                 println(io, "los = \"y\"")
@@ -40,7 +40,7 @@ using Test
             open(cfg_path, "w") do io
                 println(io, "[paths]")
                 println(io, "simulations_root = \"$td\"")
-                println(io, "outputs_root = \"$td/out\"")
+                println(io, "desktop_output_root = \"$td/out\"")
                 println(io, "[simulation]")
                 println(io, "name = \"simA\"")
                 println(io, "los = \"y\"")
@@ -102,16 +102,16 @@ using Test
         dm_x, em_x, dl_x = dm_em_maps(ne, "x"; lbox_pc=50.0)
         @test size(dm_x) == (2, 2)
         @test size(em_x) == (2, 2)
-        @test dl_x == 50.0
-        @test all(isapprox.(dm_x, 2 * expected_ne * 50.0; rtol=1e-6, atol=0.0))
-        @test all(isapprox.(em_x, 2 * expected_ne^2 * 50.0; rtol=1e-6, atol=0.0))
+        @test dl_x == 25.0
+        @test all(isapprox.(dm_x, 2 * expected_ne * 25.0; rtol=1e-6, atol=0.0))
+        @test all(isapprox.(em_x, 2 * expected_ne^2 * 25.0; rtol=1e-6, atol=0.0))
 
         dm_z, em_z, dl_z = dm_em_maps(ne, "z"; lbox_pc=100.0)
         @test size(dm_z) == (2, 2)
         @test size(em_z) == (2, 2)
-        @test dl_z == 100.0
-        @test all(isapprox.(dm_z, 2 * expected_ne * 100.0; rtol=1e-6, atol=0.0))
-        @test all(isapprox.(em_z, 2 * expected_ne^2 * 100.0; rtol=1e-6, atol=0.0))
+        @test dl_z == 50.0
+        @test all(isapprox.(dm_z, 2 * expected_ne * 50.0; rtol=1e-6, atol=0.0))
+        @test all(isapprox.(em_z, 2 * expected_ne^2 * 50.0; rtol=1e-6, atol=0.0))
     end
 
     @testset "path + orchestration helpers" begin
@@ -138,7 +138,7 @@ using Test
             open(cfg_path, "w") do io
                 println(io, "[paths]")
                 println(io, "simulations_root = \"$td\"")
-                println(io, "outputs_root = \"$td/out\"")
+                println(io, "desktop_output_root = \"$td/out\"")
                 println(io, "[simulation]")
                 println(io, "name = \"simA\"")
                 println(io, "los = \"x\"")
@@ -156,6 +156,27 @@ using Test
             @test job_result["los"] == "z"
         end
 
+        mktempdir() do td
+            preferred = joinpath(td, "preferred")
+            legacy = joinpath(td, "legacy")
+            cfg_preferred = Dict(
+                "paths" => Dict(
+                    "desktop_output_root" => preferred,
+                    "outputs_root" => legacy,
+                ),
+                "simulation" => Dict("name" => "simA", "los" => "y"),
+            )
+            dir_preferred = standard_output_dir(cfg_preferred, "demo_job")
+            @test startswith(dir_preferred, preferred)
+
+            cfg_legacy = Dict(
+                "paths" => Dict("outputs_root" => legacy),
+                "simulation" => Dict("name" => "simA", "los" => "y"),
+            )
+            dir_legacy = standard_output_dir(cfg_legacy, "demo_job")
+            @test startswith(dir_legacy, legacy)
+        end
+
         missing_path = "/tmp/does-not-exist-file.fits"
         err = try
             require_existing_files([missing_path]; context="unit-check")
@@ -166,5 +187,42 @@ using Test
         @test err isa ErrorException
         @test occursin("unit-check", sprint(showerror, err))
         @test occursin(missing_path, sprint(showerror, err))
+    end
+
+    @testset "repl help" begin
+        help_text = sprint(io -> depol_help(io))
+        alias_text = sprint(io -> repl_help(io))
+        jobs_text = sprint(io -> depol_help(io; topic="jobs"))
+        one_job_text = sprint(io -> depol_help(io; topic="instrumental"))
+        canal_alias_text = sprint(io -> depol_help(io; topic="canal"))
+        cli_text = sprint(io -> depol_help(io; topic="cli"))
+        order_text = sprint(io -> depol_help(io; topic="order"))
+
+        @test occursin("Depolarization REPL quick help", help_text)
+        @test occursin("Jobs: what they do + how to run in REPL", help_text)
+        @test occursin("Recommended order (fresh simulation)", help_text)
+        @test occursin("CLI cheatsheet (one command per job)", help_text)
+        @test occursin("run_ne_dm_em_job(cfg)", help_text)
+        @test occursin("run_mach_suite(cfg)", help_text)
+        @test occursin("run_reversal_transition_job(cfg)", help_text)
+        @test occursin("run_canal_metrics_job(cfg)", help_text)
+        @test occursin("run_segmentation_pipeline_job(cfg)", help_text)
+        @test occursin("run_instrumental_effect_job(cfg)", help_text)
+        @test occursin("depol_help(\"canal\")", help_text)
+        @test occursin("depol_help(\"instrumental\")", help_text)
+        @test occursin("DepolLib.help(\"instrumental\")", help_text)
+        @test occursin("run_instrumental_effect_job(cfg)", one_job_text)
+        @test !occursin("run_mach_suite(cfg)", one_job_text)
+        @test occursin("run_canal_metrics_job(cfg)", canal_alias_text)
+        @test !occursin("run_instrumental_effect_job(cfg)", canal_alias_text)
+        @test occursin("run_mach_suite(cfg)", jobs_text)
+        @test occursin("run_canal_metrics_job(cfg)", jobs_text)
+        @test occursin("src/code/jobs/run_canal_metrics_job.jl --config config/default.toml", cli_text)
+        @test occursin("for job in \\", cli_text)
+        @test occursin("1. ne_dm_em", order_text)
+        @test occursin("6. instrumental", order_text)
+        @test_throws ErrorException depol_help(IOBuffer(); topic="unknown_topic")
+        @test jobs_text == sprint(io -> DepolLib.help(io; topic="jobs"))
+        @test help_text == alias_text
     end
 end

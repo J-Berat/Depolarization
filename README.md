@@ -1,150 +1,86 @@
 # Depolarization
 
-Julia workflows for depolarization and synchrotron/Faraday analysis on RAMSES simulation products.
+Julia workflows for depolarization and synchrotron/Faraday analysis on RAMSES simulation data.
 
-## Quick Start
+## Quick Start (CLI)
 
 ```bash
-# 1) bootstrap local Julia environment (installs + precompiles)
+# 1) Install + precompile local environment
 julia --startup-file=no --project=. scripts/precompile.jl
 
-# 2) run one job on a target simulation (with runtime overrides)
+# 2) Run one job with runtime overrides
 julia --startup-file=no --project=. src/code/jobs/run_instrumental_effect_job.jl \
   --config config/default.toml \
   --set paths.simulations_root=/path/to/simu_RAMSES \
+  --set paths.desktop_output_root=./outputs \
   --set simulation.name=d1cf05bx10rms18000nograv1024 \
   --set simulation.los=y
 
-# 3) inspect outputs
-ls -R outputs/instrumental_effect/d1cf05bx10rms18000nograv1024/LOSy
+# 3) Check generated outputs
+ls -R ./outputs/instrumental/d1cf05bx10rms18000nograv1024/LOSy
 ```
 
-## Project Layout
-
-- `src/code/lib/DepolLib.jl`: shared config, FITS, LOS, and output helpers
-- `src/code/jobs/`: consolidated multi-step pipelines
-- `src/code/instrumental_effect/`: instrumental filtering module
-- `src/code/fits_io.jl`, `src/code/los_utils.jl`: low-level shared support
-- `scripts/precompile.jl`: local dependency install + precompile helper
-- `config/default.toml`: runtime configuration
-- `docs/functions.md`: function index for the codebase
-
-## Requirements
-
-- Julia 1.10+
-- Julia packages: `CairoMakie`, `FITSIO`, `LaTeXStrings`, `StatsBase`, `Makie`, `FFTW`, `Interpolations`
-
-Project-local install (without using the helper script):
+All jobs support:
 
 ```bash
-julia --startup-file=no --project=. -e 'using Pkg; Pkg.add(["CairoMakie","FITSIO","LaTeXStrings","StatsBase","Makie","FFTW","Interpolations"]); Pkg.precompile()'
+julia --startup-file=no --project=. <job>.jl --config config/default.toml --set key=value --set other.key=value
 ```
 
-## Precompile (Recommended)
-
-Run this before first use (and after major updates) to reduce startup latency:
+Or run with forced precompilation every time:
 
 ```bash
-julia --startup-file=no --project=. scripts/precompile.jl
+./scripts/run_with_precompile.sh reversal_transition --config config/default.toml
 ```
 
-This script activates the repository root and creates/updates local `Project.toml` and `Manifest.toml` when needed.
+Accepted CLI args are only `--config` and repeatable `--set key=value`.
 
-Dependencies-only variant:
+## Documentation
 
-```bash
-julia --startup-file=no --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
-```
+- [docs/README.md](docs/README.md): documentation index and reading map.
+- [docs/getting_started.md](docs/getting_started.md): setup, first run, CLI/REPL workflows.
+- [docs/configuration.md](docs/configuration.md): config keys, overrides, and task sections.
+- [docs/jobs.md](docs/jobs.md): complete per-job inputs/outputs and execution order.
+- [docs/development.md](docs/development.md): architecture, tests, and maintenance workflow.
+- [docs/instrumental_effect.md](docs/instrumental_effect.md): full pipeline contract for `run_instrumental_effect_job.jl` (inputs, flags, outputs, integrity report, logs).
+- [docs/functions.md](docs/functions.md): auto-generated function index across `src/code/`.
 
-## Configuration
-
-Edit `config/default.toml` before running. Key groups:
-
-- `paths`
-- `simulation`
-- `tasks`
-
-Most-used keys:
-
-- `paths.simulations_root`
-- `paths.outputs_root`
-- `paths.transitions_csv_root`
-- `simulation.name`
-- `simulation.los` (`x`, `y`, `z`)
-
-All scripts that use the shared runtime loader accept:
+Regenerate function docs:
 
 ```bash
-julia --startup-file=no --project=. <script>.jl --config config/default.toml --set key=value --set other.key=value
-```
-
-- `--config`: TOML file path (default: `config/default.toml`)
-- `--set`: repeatable dotted-key override
-
-## Common CLI Patterns
-
-Run with explicit data root, output root, simulation, and LOS:
-
-```bash
-julia --startup-file=no --project=. src/code/jobs/run_reversal_transition_job.jl \
-  --config config/default.toml \
-  --set paths.simulations_root=/path/to/simu_RAMSES \
-  --set paths.outputs_root=./outputs \
-  --set simulation.name=d1cf05bx10rms18000nograv1024 \
-  --set simulation.los=y
-```
-
-Switch LOS quickly without touching the TOML file:
-
-```bash
-julia --startup-file=no --project=. src/code/jobs/run_segmentation_pipeline_job.jl \
-  --config config/default.toml \
-  --set simulation.los=x
-```
-
-## Main Job Entrypoints
-
-```bash
-julia --startup-file=no --project=. src/code/jobs/run_ne_dm_em_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_mach_suite.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_reversal_transition_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_segmentation_pipeline_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_instrumental_effect_job.jl --config config/default.toml
+./scripts/generate_functions_doc.sh
 ```
 
 ## Use From REPL
 
-Start a project-aware REPL:
+Start REPL in project mode:
 
 ```bash
 julia --startup-file=no --project=.
 ```
 
-Then run jobs interactively:
+Example:
 
 ```julia
 julia> cd("/absolute/path/to/Depolarization")
 
 julia> include("src/code/lib/DepolLib.jl")
 julia> include("src/code/jobs/run_instrumental_effect_job.jl")
-
 julia> using .DepolLib
 
 julia> cfg = build_cfg("instrumental";
            config_path="config/default.toml",
            overrides=Dict(
              "paths.simulations_root" => "/path/to/simu_RAMSES",
+             "paths.desktop_output_root" => "./outputs",
              "simulation.name" => "d1cf05bx10rms18000nograv1024",
              "simulation.los" => "y",
-             "paths.outputs_root" => "./outputs",
            ));
 
-julia> result = run_instrumental_effect_job(cfg);
+julia> result = run_instrumental_effect_job(cfg)
 julia> result["output_dir"]
-julia> result["integrity_status"]
 ```
 
-Equivalent style using CLI-like args (same behavior as terminal `--config/--set`):
+CLI-style config in REPL is also supported:
 
 ```julia
 julia> cfg = load_runtime_config("reversal";
@@ -154,58 +90,68 @@ julia> cfg = load_runtime_config("reversal";
              "--set", "simulation.name=d1cf05bx10rms18000nograv1024",
              "--set", "simulation.los=y",
            ]);
-
-julia> include("src/code/jobs/run_reversal_transition_job.jl");
-julia> result = run_reversal_transition_job(cfg);
-julia> result["outputs"]["plot"]
 ```
 
-Run other jobs from REPL the same way:
+Built-in REPL help (from `DepolLib`):
 
 ```julia
-julia> include("src/code/jobs/run_mach_suite.jl");
-julia> include("src/code/jobs/run_ne_dm_em_job.jl");
-julia> include("src/code/jobs/run_segmentation_pipeline_job.jl");
+julia> include("src/code/lib/DepolLib.jl")
+julia> using .DepolLib
 
-julia> run_mach_suite(cfg)                     # task = "mach"
-julia> run_ne_dm_em_job(cfg)                  # task = "ne_dm_em"
-julia> run_segmentation_pipeline_job(cfg)      # task = "segmentation"
+julia> depol_help()               # full guide (setup + jobs)
+julia> depol_help("jobs")         # all jobs
+julia> depol_help("instrumental") # one specific job
+
+julia> repl_help("reversal")       # alias of depol_help(...)
+julia> DepolLib.help("reversal")   # qualified fallback if needed
 ```
 
-Quick notes:
+## Jobs
 
-- `build_cfg(...)` gives the same runtime contract as CLI `--config` + `--set`.
-- Job functions return a summary `Dict{String,Any}` suitable for interactive inspection.
-- In REPL, `include("src/code/jobs/<job>.jl")` loads the function without auto-running it.
+- `src/code/jobs/run_ne_dm_em_job.jl`
+- `src/code/jobs/run_mach_suite.jl`
+- `src/code/jobs/run_reversal_transition_job.jl`
+- `src/code/jobs/run_canal_metrics_job.jl`
+- `src/code/jobs/run_segmentation_pipeline_job.jl`
+- `src/code/jobs/run_instrumental_effect_job.jl`
 
-## Input Checklist by Job
+Recommended order (fresh simulation):
 
-Before launching a job, make sure the required inputs exist for the selected simulation/LOS.
+1. `run_ne_dm_em_job.jl` (builds `ne.fits`, `DM.fits`, `EM.fits`)
+2. `run_mach_suite.jl`
+3. `run_reversal_transition_job.jl`
+4. `run_canal_metrics_job.jl`
+5. `run_segmentation_pipeline_job.jl`
+6. `run_instrumental_effect_job.jl`
 
-- `run_mach_suite.jl`
-  - simulation cubes: `Bx.fits`, `By.fits`, `Bz.fits`, `Vx.fits`, `Vy.fits`, `Vz.fits`, `density.fits`, `temperature.fits`
-  - LOS maps for both configured LOS (`tasks.mach_suite.los_y`, `tasks.mach_suite.los_x`): `Synchrotron/WithFaraday/Pmax.fits`
-- `run_ne_dm_em_job.jl`
-  - root simulation cubes: `density.fits`, `temperature.fits`
-  - writes LOS products: `Synchrotron/ne.fits`, `Synchrotron/DM.fits`, `Synchrotron/EM.fits`
-- `run_reversal_transition_job.jl`
-  - LOS products: `Synchrotron/WithFaraday/Pmax.fits`, `Synchrotron/ne.fits`, `Synchrotron/WithFaraday/FDF.fits`
-  - LOS magnetic cube from root simulation folder: one of `Bx.fits`, `By.fits`, `Bz.fits` (chosen from `simulation.los`)
-- `run_segmentation_pipeline_job.jl`
-  - root cubes used for chunk/cut steps: `Bx.fits`, `By.fits`, `Bz.fits`, `Vx.fits`, `Vy.fits`, `Vz.fits`, `density.fits`, `temperature.fits`
-  - transition intervals CSV (from `paths.transitions_csv_root` + `tasks.cut_transition.transitions_csv`) with columns `kmin,kmax`
-  - optional for panel plotting: `/<los>/Synchrotron/WithFaraday/Pmax.fits`
-- `run_instrumental_effect_job.jl`
-  - LOS products: `Synchrotron/WithFaraday/Qnu.fits`, `Unu.fits`, `Pmax.fits`, `realFDF.fits`, `imagFDF.fits`
-  - root simulation cubes: `Bx.fits`, `By.fits`, `Bz.fits`, `density.fits`
+CLI cheatsheet (one command per job):
 
-## Run All Jobs (Batch)
+```bash
+julia --startup-file=no --project=. src/code/jobs/run_ne_dm_em_job.jl --config config/default.toml
+julia --startup-file=no --project=. src/code/jobs/run_mach_suite.jl --config config/default.toml
+julia --startup-file=no --project=. src/code/jobs/run_reversal_transition_job.jl --config config/default.toml
+julia --startup-file=no --project=. src/code/jobs/run_canal_metrics_job.jl --config config/default.toml
+julia --startup-file=no --project=. src/code/jobs/run_segmentation_pipeline_job.jl --config config/default.toml
+julia --startup-file=no --project=. src/code/jobs/run_instrumental_effect_job.jl --config config/default.toml
+```
+
+REPL task names for `build_cfg(task, ...)` / `load_runtime_config(task, ...)`:
+
+- `ne_dm_em`
+- `mach`
+- `reversal`
+- `canal_metrics`
+- `segmentation`
+- `instrumental`
+
+Run all jobs:
 
 ```bash
 for job in \
   src/code/jobs/run_ne_dm_em_job.jl \
   src/code/jobs/run_mach_suite.jl \
   src/code/jobs/run_reversal_transition_job.jl \
+  src/code/jobs/run_canal_metrics_job.jl \
   src/code/jobs/run_segmentation_pipeline_job.jl \
   src/code/jobs/run_instrumental_effect_job.jl
 do
@@ -213,48 +159,22 @@ do
 done
 ```
 
-Task keys used by these jobs live under:
+## Minimal Config
 
-- `tasks.ne_dm_em`
-- `tasks.mach_suite`
-- `tasks.reversal_transition_job`
-- `tasks.reversals_map`
-- `tasks.b_transition`
-- `tasks.segmentation_pipeline_job`
-- `tasks.cut_transition`
-- `tasks.make_chunk`
-- `tasks.instrumental_effect`
+Main keys in `config/default.toml`:
 
-## Job Outputs
+- `paths.simulations_root`
+- `paths.desktop_output_root` (optional; default is `~/Desktop/depolarization_outputs`)
+- `paths.transitions_csv_root`
+- `simulation.name`
+- `simulation.los` (`x`, `y`, `z`)
 
-- `run_ne_dm_em_job.jl`
-  - simulation LOS folder:
-    - `<simulations_root>/<simulation>/<los>/Synchrotron/ne.fits`
-    - `<simulations_root>/<simulation>/<los>/Synchrotron/DM.fits`
-    - `<simulations_root>/<simulation>/<los>/Synchrotron/EM.fits`
-  - figure:
-    - `<outputs_root>/ne_dm_em/<simulation>/LOS<los>/..._dm_em_maps.pdf`
-- `run_mach_suite.jl`
-  - `<outputs_root>/mach_suite/multi/LOS<los_y>/mach_suite_multi_LOS<los_y>_p10_scatter.pdf`
-  - `<outputs_root>/mach_suite/multi/LOS<los_y>/mach_suite_multi_LOS<los_y>_fraction_scatter.pdf`
-  - `<outputs_root>/mach_suite/multi/LOS<los_y>/mach_suite_multi_LOS<los_y>_summary.csv`
-- `run_reversal_transition_job.jl`
-  - `<outputs_root>/reversal_transition_job/<simulation>/LOS<los>/..._overview.pdf`
-  - `<outputs_root>/reversal_transition_job/<simulation>/LOS<los>/..._windows.csv`
-  - `<outputs_root>/reversal_transition_job/<simulation>/LOS<los>/..._summary.log`
-- `run_segmentation_pipeline_job.jl`
-  - chunked FITS under `<outputs_root>/segmentation_pipeline_job_chunks/<simulation>/LOS<los>/`
-  - cut FITS under `<outputs_root>/segmentation_pipeline_job_cuts/<simulation>/LOS<los>/`
-  - `<outputs_root>/segmentation_pipeline_job/<simulation>/LOS<los>/..._intervals.csv`
-  - `<outputs_root>/segmentation_pipeline_job/<simulation>/LOS<los>/..._pmax_panels.pdf`
-- `run_instrumental_effect_job.jl`
-  - per-filter folders under `<outputs_root>/instrumental_effect/<simulation>/LOS<los>/HardBandPass_*`
-  - each folder writes `Qnu_filtered.fits`, `Unu_filtered.fits`, and `RMSynthesis/Pphi_max.fits`
-  - when `tasks.instrumental_effect.run_channel_b_alignment=true`:
-    - `<outputs_root>/instrumental_effect/<simulation>/LOS<los>/channel_alignment_summary.csv`
-    - `<outputs_root>/instrumental_effect/<simulation>/LOS<los>/figures/channel_alignment_vs_filter.pdf`
+Task toggles/params live under `tasks.*` (for example `tasks.canal_metrics`, `tasks.instrumental_effect`, `tasks.ne_dm_em`, `tasks.segmentation_pipeline_job`).
 
-## Expected Input Data Layout
+`paths.desktop_output_root` is the preferred key.
+Legacy `paths.outputs_root` is still accepted as a fallback.
+
+## Expected Inputs
 
 ```text
 <simulations_root>/
@@ -269,9 +189,9 @@ Task keys used by these jobs live under:
     temperature.fits
     <los>/
       Synchrotron/
-        ne.fits
-        DM.fits
-        EM.fits
+        ne.fits                # generated by run_ne_dm_em_job.jl (or provided)
+        DM.fits                # generated by run_ne_dm_em_job.jl
+        EM.fits                # generated by run_ne_dm_em_job.jl
         WithFaraday/
           Pmax.fits
           Qnu.fits
@@ -281,48 +201,52 @@ Task keys used by these jobs live under:
           imagFDF.fits
 ```
 
-Transition interval CSV files are read from `paths.transitions_csv_root`.
+Required by job:
 
-## Output Convention
+- `run_ne_dm_em_job.jl`: `density.fits`, `temperature.fits`
+- `run_mach_suite.jl`: root cubes + LOS `WithFaraday/Pmax.fits` for both `tasks.mach_suite.los_y` and `tasks.mach_suite.los_x`
+- `run_reversal_transition_job.jl`: `WithFaraday/Pmax.fits`, `WithFaraday/FDF.fits`, `Synchrotron/ne.fits`, and LOS magnetic cube (`Bx`/`By`/`Bz` by LOS)
+- `run_canal_metrics_job.jl`: `WithFaraday/Pmax.fits`, `Synchrotron/ne.fits`, and root `Bx.fits/By.fits/Bz.fits`
+- `run_segmentation_pipeline_job.jl`: root cubes + transitions CSV under `paths.transitions_csv_root` with columns `kmin,kmax`
+- `run_instrumental_effect_job.jl`: `WithFaraday/Qnu.fits`, `Unu.fits`, `Pmax.fits`, `realFDF.fits`, `imagFDF.fits` + root `Bx/By/Bz/density`
 
-Top-level output directories are standardized to:
+## Outputs
 
-```text
-<outputs_root>/<task>/<simulation>/LOS<los>/
-```
-
-Filename pattern:
-
-```text
-<task>_<simulation>_LOS<los>_<artifact>.<ext>
-```
-
-Examples:
+Top-level output folder pattern:
 
 ```text
-outputs/mach_suite/multi/LOSy/mach_suite_multi_LOSy_summary.csv
-outputs/reversal_transition_job/d1cf05bx10rms18000nograv1024/LOSy/reversal_transition_job_d1cf05bx10rms18000nograv1024_LOSy_windows.csv
+<desktop_output_root>/<task>/<simulation>/LOS<los>/
 ```
 
-Note: some pipelines (notably `instrumental_effect` and segmentation subproducts) also create nested files/folders inside the standardized task directory.
+For the instrumental pipeline, each filter also writes:
 
-## Developer Notes
+- `HardBandPass_remove_L0_to_1pc_and_<L>to50pc/Qnu_filtered.fits`
+- `HardBandPass_remove_L0_to_1pc_and_<L>to50pc/Unu_filtered.fits`
+- `HardBandPass_remove_L0_to_1pc_and_<L>to50pc/RMSynthesis/Pphi_max.fits`
+- `figures/*.pdf`
+- `channel_alignment_summary.csv` (if `tasks.instrumental_effect.run_channel_b_alignment=true`)
+- `figures/channel_alignment_delta_theta_hist.pdf` (if `tasks.instrumental_effect.run_channel_b_alignment=true`)
+- `tasks.instrumental_effect.channel_alignment_pdf_plain=true` saves this PDF without slider UI (histograms only).
+- `integrity_report.txt`
 
-- Job entrypoints under `src/code/jobs/` should keep the same runtime contract:
-  - load config via shared helpers (`--config`, repeatable `--set`)
-  - validate inputs early
-  - return a structured `Dict` summary
-- Shared runtime/path/output helpers belong in `src/code/lib/DepolLib.jl`.
-- `src/code/common.jl` is compatibility-only; new code should prefer direct `DepolLib` usage.
-- Inside `src/code/instrumental_effect/`, keep boundaries explicit:
-  - compute + IO contracts in `pipeline.jl` and `contracts.jl`
-  - plotting-only behavior in `plotting.jl`
-  - low-level Fourier/filter helpers in `filters.jl`, `spectra.jl`, `io_and_axes.jl`
+For `canal_metrics`, outputs include:
+
+- `maps_cb_cphi.pdf`
+- `pdfs_2x2.pdf`
+- `cb_ab_matrix.pdf`
+
+Task names produced by current jobs:
+
+- `ne_dm_em`
+- `mach`
+- `reversal`
+- `canal_metrics`
+- `segmentation`
+- `instrumental`
 
 ## Troubleshooting
 
-- Missing FITS files: validate `paths.simulations_root`, `simulation.name`, `simulation.los`, and required files in the layout above.
-- LOS errors: only `x`, `y`, `z` are accepted.
-- Transition pipeline errors: verify `paths.transitions_csv_root` and CSV columns `kmin,kmax`.
-- Shape mismatch errors: confirm all related cubes/maps have compatible dimensions.
-- CLI argument errors: only `--config` and repeatable `--set key=value` are accepted by the shared runtime loader.
+- Missing FITS files: verify `paths.simulations_root`, `simulation.name`, `simulation.los`.
+- Invalid LOS: only `x`, `y`, `z`.
+- Transition CSV errors: verify `paths.transitions_csv_root` and CSV columns `kmin,kmax`.
+- CLI parsing errors: use only `--config` and repeatable `--set key=value`.

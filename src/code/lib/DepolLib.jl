@@ -9,6 +9,7 @@ include(joinpath(@__DIR__, "..", "los_utils.jl"))
 
 export DEFAULT_CONFIG_PATH,
        load_runtime_config, build_cfg, cfg_get, cfg_require,
+       depol_help, repl_help,
        require_los, los_axis, axis_pc, ticks_pc,
        read_FITS, write_FITS, los_config, smooth_moving_average, sign_eps, reversal_indices,
        read_fits_f32, require_ndims, require_same_size,
@@ -25,6 +26,247 @@ const DEFAULT_CONFIG_PATH = normpath(joinpath(@__DIR__, "..", "..", "..", "confi
 const OUTPUTS_ROOT_DEFAULT = joinpath(homedir(), "Desktop", "depolarization_outputs")
 const _ANNOUNCED_OUTPUT_DIRS = Set{String}()
 const _ANNOUNCED_OUTPUT_PATHS = Set{String}()
+const _ANNOUNCED_LEGACY_OUTPUT_ROOT = Ref(false)
+
+const _HELP_JOB_ORDER = [
+    "ne_dm_em",
+    "mach",
+    "reversal",
+    "canal_metrics",
+    "segmentation",
+    "instrumental",
+]
+
+const _HELP_TOPIC_ALIASES = Dict(
+    "canal" => "canal_metrics",
+    "rev" => "reversal",
+    "seg" => "segmentation",
+    "inst" => "instrumental",
+    "overview" => "all",
+    "full" => "all",
+    "alljobs" => "jobs",
+    "pipeline" => "order",
+)
+
+const _HELP_JOB_SPECS = Dict(
+    "ne_dm_em" => (
+        summary="Compute electron density (ne) and integrated DM/EM maps.",
+        include_path="src/code/jobs/run_ne_dm_em_job.jl",
+        task_name="ne_dm_em",
+        run_func="run_ne_dm_em_job",
+        config_sections=("tasks.ne_dm_em",),
+    ),
+    "mach" => (
+        summary="Compute <Ms>/<MA> suite metrics and write scatter plots + summary CSV.",
+        include_path="src/code/jobs/run_mach_suite.jl",
+        task_name="mach",
+        run_func="run_mach_suite",
+        config_sections=("tasks.mach_suite",),
+    ),
+    "reversal" => (
+        summary="Detect B_LOS reversals, build transition windows, and analyze FDF transitions.",
+        include_path="src/code/jobs/run_reversal_transition_job.jl",
+        task_name="reversal",
+        run_func="run_reversal_transition_job",
+        config_sections=("tasks.reversal_transition_job", "tasks.reversals_map", "tasks.b_transition"),
+    ),
+    "canal_metrics" => (
+        summary="Compute Cb/Cphi coherence maps and canal-vs-non-canal diagnostics.",
+        include_path="src/code/jobs/run_canal_metrics_job.jl",
+        task_name="canal_metrics",
+        run_func="run_canal_metrics_job",
+        config_sections=("tasks.canal_metrics",),
+    ),
+    "segmentation" => (
+        summary="Chunk cubes, cut transition intervals, and produce Pmax panel outputs.",
+        include_path="src/code/jobs/run_segmentation_pipeline_job.jl",
+        task_name="segmentation",
+        run_func="run_segmentation_pipeline_job",
+        config_sections=("tasks.segmentation_pipeline_job", "tasks.cut_transition", "tasks.make_chunk"),
+    ),
+    "instrumental" => (
+        summary="Run instrumental filtering/analysis on Q/U/Pmax/FDF products.",
+        include_path="src/code/jobs/run_instrumental_effect_job.jl",
+        task_name="instrumental",
+        run_func="run_instrumental_effect_job",
+        config_sections=("tasks.instrumental_effect",),
+    ),
+)
+
+function _resolve_help_topic(topic::AbstractString)
+    topic_norm = lowercase(strip(topic))
+    isempty(topic_norm) && return "all"
+    return get(_HELP_TOPIC_ALIASES, topic_norm, topic_norm)
+end
+
+function _print_help_setup(io::IO)
+    print(io, """
+1) Start Julia in project mode
+   julia --startup-file=no --project=.
+
+2) Load core library
+   include("src/code/lib/DepolLib.jl")
+   using .DepolLib
+
+3) Build config (shared pattern for all jobs)
+   cfg = build_cfg("instrumental";
+       config_path="config/default.toml",
+       overrides=Dict(
+         "paths.simulations_root" => "/path/to/simu_RAMSES",
+         "paths.desktop_output_root" => "./outputs",
+         "simulation.name" => "d1cf05bx10rms18000nograv1024",
+         "simulation.los" => "y",
+       ));
+
+""")
+    return nothing
+end
+
+function _print_help_job(io::IO, job::String)
+    spec = _HELP_JOB_SPECS[job]
+    println(io, "   ", job)
+    println(io, "     ", spec.summary)
+    println(io, "     config: ", join(spec.config_sections, ", "))
+    println(io, "     include(\"", spec.include_path, "\")")
+    println(io, "     cfg = build_cfg(\"", spec.task_name, "\"; config_path=\"config/default.toml\", overrides=Dict(...))")
+    println(io, "     result = ", spec.run_func, "(cfg)")
+    println(io)
+    return nothing
+end
+
+function _print_help_jobs(io::IO; only::Union{Nothing,String}=nothing)
+    println(io, "4) Jobs: what they do + how to run in REPL")
+    println(io)
+    jobs = only === nothing ? _HELP_JOB_ORDER : [only]
+    for job in jobs
+        _print_help_job(io, job)
+    end
+    return nothing
+end
+
+function _print_help_order(io::IO)
+    println(io, "5) Recommended order (fresh simulation)")
+    for (i, job) in enumerate(_HELP_JOB_ORDER)
+        println(io, "   ", i, ". ", job)
+    end
+    println(io)
+    return nothing
+end
+
+function _print_help_cli_overrides(io::IO)
+    print(io, """6) CLI-style overrides also work in REPL:
+   cfg = load_runtime_config("reversal"; args=[
+       "--config", "config/default.toml",
+       "--set", "paths.simulations_root=/path/to/simu_RAMSES",
+       "--set", "simulation.name=d1cf05bx10rms18000nograv1024",
+       "--set", "simulation.los=y",
+   ]);
+""")
+    return nothing
+end
+
+function _print_help_cli_commands(io::IO)
+    println(io, "7) CLI cheatsheet (one command per job)")
+    for job in _HELP_JOB_ORDER
+        spec = _HELP_JOB_SPECS[job]
+        println(io, "   julia --startup-file=no --project=. ", spec.include_path, " --config config/default.toml")
+    end
+    println(io)
+    return nothing
+end
+
+function _print_help_run_all(io::IO)
+    print(io, """8) Run all jobs (CLI)
+   for job in \\
+     src/code/jobs/run_ne_dm_em_job.jl \\
+     src/code/jobs/run_mach_suite.jl \\
+     src/code/jobs/run_reversal_transition_job.jl \\
+     src/code/jobs/run_canal_metrics_job.jl \\
+     src/code/jobs/run_segmentation_pipeline_job.jl \\
+     src/code/jobs/run_instrumental_effect_job.jl
+   do
+     julia --startup-file=no --project=. "\$job" --config config/default.toml
+   done
+""")
+    return nothing
+end
+
+function _known_help_topics()
+    aliases = sort(collect(keys(_HELP_TOPIC_ALIASES)))
+    return join(vcat(["all", "jobs", "order", "cli"], _HELP_JOB_ORDER, aliases), ", ")
+end
+
+"""
+    help([io]; topic="all")
+    help(topic)
+
+Prints REPL usage guidance.
+
+`topic` can be:
+- `"all"`: setup + jobs + order + CLI examples
+- `"jobs"`: setup + all jobs
+- `"order"`: recommended execution order
+- `"cli"`: CLI examples (single-job and run-all)
+- one job name (`"ne_dm_em"`, `"mach"`, `"reversal"`, `"canal_metrics"`, `"segmentation"`, `"instrumental"`)
+- aliases (`"canal"`, `"rev"`, `"seg"`, `"inst"`)
+"""
+function help(io::IO=stdout; topic::AbstractString="all")
+    topic_norm = _resolve_help_topic(topic)
+
+    print(io, """Depolarization REPL quick help
+
+Usage:
+  depol_help()                     # full guide (preferred, no name conflict)
+  depol_help("jobs")               # all jobs
+  depol_help("canal")              # alias for canal_metrics
+  depol_help("instrumental")       # one job
+  depol_help("order")              # recommended order
+  depol_help("cli")                # CLI examples
+  DepolLib.help("instrumental")    # qualified fallback
+
+""")
+
+    if topic_norm == "all"
+        _print_help_setup(io)
+        _print_help_jobs(io)
+        _print_help_order(io)
+        _print_help_cli_overrides(io)
+        _print_help_cli_commands(io)
+        _print_help_run_all(io)
+    elseif topic_norm == "jobs"
+        _print_help_setup(io)
+        _print_help_jobs(io)
+    elseif topic_norm == "order"
+        _print_help_order(io)
+    elseif topic_norm == "cli"
+        _print_help_cli_overrides(io)
+        _print_help_cli_commands(io)
+        _print_help_run_all(io)
+    elseif haskey(_HELP_JOB_SPECS, topic_norm)
+        _print_help_setup(io)
+        _print_help_jobs(io; only=topic_norm)
+    else
+        error("Unknown help topic '$topic'. Known topics: $(_known_help_topics())")
+    end
+
+    return nothing
+end
+
+help(topic::AbstractString) = help(stdout; topic=topic)
+
+"""
+    depol_help(...)
+
+Alias for `help(...)` with a non-ambiguous exported name.
+"""
+depol_help(args...; kwargs...) = help(args...; kwargs...)
+
+"""
+    repl_help(...)
+
+Alias for `depol_help(...)`.
+"""
+repl_help(args...; kwargs...) = depol_help(args...; kwargs...)
 
 """
     _parse_scalar(...)
@@ -306,7 +548,8 @@ function dm_em_maps(ne::AbstractArray{<:Real,3}, los::AbstractString; lbox_pc::R
     ax = los_axis(los)
     nlos = size(ne, ax)
     nlos > 0 || error("LOS size must be positive, got $nlos")
-    dl_pc = nlos > 1 ? Float64(lbox_pc) / (nlos - 1) : Float64(lbox_pc)
+    # Cell-centered discretization: for N pixels over Lbox, use dl = Lbox / N.
+    dl_pc = Float64(lbox_pc) / nlos
 
     dm = dropdims(sum(ne; dims=ax); dims=ax) .* dl_pc
     em = dropdims(sum(abs2, ne; dims=ax); dims=ax) .* dl_pc
@@ -516,12 +759,42 @@ function normalize_task_name(task::AbstractString)
 end
 
 """
+    _resolve_output_root(...)
+
+Resolves output root from config keys with backward-compatible fallback:
+- `paths.desktop_output_root` (preferred)
+- `paths.outputs_root` (legacy)
+- default `~/Desktop/depolarization_outputs`
+"""
+function _resolve_output_root(cfg::AbstractDict)
+    preferred = cfg_get(cfg, ["paths", "desktop_output_root"]; default=nothing)
+    if preferred !== nothing
+        preferred_str = strip(string(preferred))
+        !isempty(preferred_str) && return preferred_str
+    end
+
+    legacy = cfg_get(cfg, ["paths", "outputs_root"]; default=nothing)
+    if legacy !== nothing
+        legacy_str = strip(string(legacy))
+        if !isempty(legacy_str)
+            if !_ANNOUNCED_LEGACY_OUTPUT_ROOT[]
+                @warn "paths.outputs_root is deprecated; prefer paths.desktop_output_root" outputs_root=legacy_str
+                _ANNOUNCED_LEGACY_OUTPUT_ROOT[] = true
+            end
+            return legacy_str
+        end
+    end
+
+    return OUTPUTS_ROOT_DEFAULT
+end
+
+"""
     standard_output_dir(...)
 
-    Creates/returns a standard output directory (Desktop by default).
+Creates/returns a standard output directory.
 """
 function standard_output_dir(cfg::AbstractDict, task::AbstractString; simu=nothing, los=nothing)
-    out_root = string(cfg_get(cfg, ["paths", "desktop_output_root"]; default=OUTPUTS_ROOT_DEFAULT))
+    out_root = _resolve_output_root(cfg)
     simu_name = simu === nothing ? string(cfg_require(cfg, ["simulation", "name"])) : string(simu)
     los_name = los === nothing ? string(cfg_require(cfg, ["simulation", "los"])) : string(los)
     require_los(los_name)

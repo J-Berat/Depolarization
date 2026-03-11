@@ -25,6 +25,7 @@ Base.@kwdef struct InstrumentalConfig
 
     ichan::Int = 50
     iphi::Int = 30
+    channel_alignment_pdf_plain::Bool = true
 end
 
 Base.@kwdef struct RunFlags

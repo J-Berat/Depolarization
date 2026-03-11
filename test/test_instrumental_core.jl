@@ -33,6 +33,25 @@ using Test
         @test size(absf3) == (2, 3, 3)
     end
 
+    @testset "RMSynthesis pmax-only path" begin
+        nu = [1.0e8, 1.1e8, 1.2e8, 1.3e8]
+        phi = [-1.0, 0.0, 1.0, 2.0]
+
+        q3 = randn(Float32, 2, 3, 4)
+        u3 = randn(Float32, 2, 3, 4)
+        absf3, _, _ = InstrumentalEffect.RMSynthesis(q3, u3, nu, phi; log_progress=false)
+        pmax_ref = Float32.(InstrumentalEffect.Pphi_max_map(absf3))
+        pmax_fast = InstrumentalEffect.RMSynthesis_pmax_map(q3, u3, nu, phi; log_progress=false)
+        @test isapprox(pmax_fast, pmax_ref; rtol=1e-5, atol=1e-6)
+
+        q3f = permutedims(q3, (3, 1, 2))
+        u3f = permutedims(u3, (3, 1, 2))
+        absf3f, _, _ = InstrumentalEffect.RMSynthesis(q3f, u3f, nu, phi; log_progress=false)
+        pmax_ref_f = Float32.(InstrumentalEffect.Pphi_max_map(absf3f))
+        pmax_fast_f = InstrumentalEffect.RMSynthesis_pmax_map(q3f, u3f, nu, phi; log_progress=false)
+        @test isapprox(pmax_fast_f, pmax_ref_f; rtol=1e-5, atol=1e-6)
+    end
+
     @testset "filter application guards" begin
         img = randn(4, 4)
         H = ones(Float32, 4, 4)

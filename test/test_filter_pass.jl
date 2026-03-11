@@ -207,11 +207,12 @@ end
                 @test result isa InstrumentalEffect.FilterPassResult
                 @test steps == [:filter_pass, :run_channel_b_alignment]
                 @test isfile(joinpath(cfg.base_out, "channel_alignment_summary.csv"))
-                @test isfile(joinpath(cfg.base_out, "figures", "channel_alignment_vs_filter.pdf"))
+                @test isfile(joinpath(cfg.base_out, "figures", "channel_alignment_delta_theta_hist.pdf"))
 
                 csv = read(joinpath(cfg.base_out, "channel_alignment_summary.csv"), String)
                 @test occursin("reference", csv)
                 @test occursin("B_perp", csv)
+                @test !occursin("grad_phi", csv)
             end
         end
     end

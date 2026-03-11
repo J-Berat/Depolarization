@@ -24,8 +24,8 @@ function split_along_dim(data::AbstractArray, outdir::String; base::String, dim:
 
         chunk_dir = joinpath(outdir, @sprintf("chunk%02d", i))
         mkpath(chunk_dir)
-        outname = string(normalize_task_name(task_name), "_", sim, "_LOS", los, "_", base, ".fits")
-        write_FITS(joinpath(chunk_dir, outname), slice)
+        outname = string(DepolLib.normalize_task_name(task_name), "_", sim, "_LOS", los, "_", base, ".fits")
+        DepolLib.write_FITS(joinpath(chunk_dir, outname), slice)
     end
 end
 
@@ -50,24 +50,24 @@ end
     Runs the merged chunking + transition cuts + Pmax comparison pipeline.
 """
 function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
-    enabled = task_enabled(cfg, ["tasks", "segmentation_pipeline_job", "enabled"]; default=true)
+    enabled = DepolLib.task_enabled(cfg, ["tasks", "segmentation_pipeline_job", "enabled"]; default=true)
     if !enabled
-        return skipped_job_result("segmentation", "disabled by tasks.segmentation_pipeline_job.enabled")
+        return DepolLib.skipped_job_result("segmentation", "disabled by tasks.segmentation_pipeline_job.enabled")
     end
 
-    sim_root = resolve_simulations_root(cfg)
-    sim = string(cfg_require(cfg, ["simulation", "name"]))
-    los = require_los(string(cfg_require(cfg, ["simulation", "los"])))
+    sim_root = DepolLib.resolve_simulations_root(cfg)
+    sim = string(DepolLib.cfg_require(cfg, ["simulation", "name"]))
+    los = DepolLib.require_los(string(DepolLib.cfg_require(cfg, ["simulation", "los"])))
 
-    npix = Int(cfg_get(cfg, ["tasks", "cut_transition", "npix"]; default=256))
-    lbox_pc = Float64(cfg_get(cfg, ["tasks", "cut_transition", "lbox_pc"]; default=50.0))
-    merge_gap = Int(cfg_get(cfg, ["tasks", "cut_transition", "merge_gap_pix"]; default=1))
-    overwrite = Bool(cfg_get(cfg, ["tasks", "cut_transition", "overwrite"]; default=true))
-    chunk_size = Int(cfg_get(cfg, ["tasks", "make_chunk", "chunk_size"]; default=32))
+    npix = Int(DepolLib.cfg_get(cfg, ["tasks", "cut_transition", "npix"]; default=256))
+    lbox_pc = Float64(DepolLib.cfg_get(cfg, ["tasks", "cut_transition", "lbox_pc"]; default=50.0))
+    merge_gap = Int(DepolLib.cfg_get(cfg, ["tasks", "cut_transition", "merge_gap_pix"]; default=1))
+    overwrite = Bool(DepolLib.cfg_get(cfg, ["tasks", "cut_transition", "overwrite"]; default=true))
+    chunk_size = Int(DepolLib.cfg_get(cfg, ["tasks", "make_chunk", "chunk_size"]; default=32))
 
     transition_csv = joinpath(
-        string(cfg_get(cfg, ["paths", "transitions_csv_root"]; default="./data/transitions")),
-        string(cfg_get(cfg, ["tasks", "cut_transition", "transitions_csv"]; default="BLOS_decile1_LOSy_transitions.csv"))
+        string(DepolLib.cfg_get(cfg, ["paths", "transitions_csv_root"]; default="./data/transitions")),
+        string(DepolLib.cfg_get(cfg, ["tasks", "cut_transition", "transitions_csv"]; default="BLOS_decile1_LOSy_transitions.csv"))
     )
 
     fields = ["Bx", "By", "Bz", "Vx", "Vy", "Vz", "density", "temperature"]
@@ -83,23 +83,23 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
     )
 
     required_files = [transition_csv]
-    append!(required_files, [simulation_field_path(sim_root, sim, field) for field in fields])
-    require_existing_files(required_files; context="segmentation_pipeline_job")
+    append!(required_files, [DepolLib.simulation_field_path(sim_root, sim, field) for field in fields])
+    DepolLib.require_existing_files(required_files; context="segmentation_pipeline_job")
 
     # 1) Chunking
-    chunk_out = standard_output_dir(cfg, "segmentation_pipeline_job_chunks"; simu=sim, los=los)
+    chunk_out = DepolLib.standard_output_dir(cfg, "segmentation_pipeline_job_chunks"; simu=sim, los=los)
     size_tag = @sprintf("%dpix", chunk_size)
     out_x = joinpath(chunk_out, size_tag, "split_x")
     out_y = joinpath(chunk_out, size_tag, "split_y")
     out_z = joinpath(chunk_out, size_tag, "split_z")
 
     for field in fields
-        infile = simulation_field_path(sim_root, sim, field)
+        infile = DepolLib.simulation_field_path(sim_root, sim, field)
         if !isfile(infile)
             continue
         end
-        data = read_FITS(infile)
-        require_ndims(data, 3, field)
+        data = DepolLib.read_FITS(infile)
+        DepolLib.require_ndims(data, 3, field)
         size(data) == (npix, npix, npix) || error("Unexpected cube size for $field: $(size(data))")
 
         split_along_dim(data, out_x; base=field, dim=1, chunk_size=chunk_size, task_name="segmentation_pipeline_job", sim=sim, los=los)
@@ -108,14 +108,14 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
     end
 
     # 2) Cut from transition intervals
-    intervals_raw = read_intervals_from_csv(transition_csv)
-    intervals = merge_intervals(intervals_raw; gap_pix=merge_gap)
-    ax = los_axis(los)
+    intervals_raw = DepolLib.read_intervals_from_csv(transition_csv)
+    intervals = DepolLib.merge_intervals(intervals_raw; gap_pix=merge_gap)
+    ax = DepolLib.los_axis(los)
 
-    cut_out = standard_output_dir(cfg, "segmentation_pipeline_job_cuts"; simu=sim, los=los)
+    cut_out = DepolLib.standard_output_dir(cfg, "segmentation_pipeline_job_cuts"; simu=sim, los=los)
     dist = collect(range(0.0, lbox_pc; length=npix))
 
-    intervals_csv = standard_output_path(cfg, "segmentation_pipeline_job", "intervals", "csv"; simu=sim, los=los)
+    intervals_csv = DepolLib.standard_output_path(cfg, "segmentation_pipeline_job", "intervals", "csv"; simu=sim, los=los)
     open(intervals_csv, "w") do io
         println(io, "segment,kmin,kmax,smin_pc,smax_pc,width_pc,npix")
         for (seg, (kmin, kmax)) in enumerate(intervals)
@@ -128,16 +128,16 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
         mkpath(segdir)
 
         for (var, fname) in cut_vars
-            inpath = simulation_field_path(sim_root, sim, first(splitext(fname)))
+            inpath = DepolLib.simulation_field_path(sim_root, sim, first(splitext(fname)))
             if !isfile(inpath)
                 continue
             end
-            A = read_FITS(inpath)
-            require_ndims(A, 3, var)
+            A = DepolLib.read_FITS(inpath)
+            DepolLib.require_ndims(A, 3, var)
             Acut = cut_cube(A, ax, kmin, kmax)
-            outname = string(normalize_task_name("segmentation_pipeline_job"), "_", sim, "_LOS", los, "_seg", lpad(seg, 2, '0'), "_", replace(var, " " => "_"), ".fits")
+            outname = string(DepolLib.normalize_task_name("segmentation_pipeline_job"), "_", sim, "_LOS", los, "_seg", lpad(seg, 2, '0'), "_", replace(var, " " => "_"), ".fits")
             outpath = joinpath(segdir, outname)
-            write_FITS(outpath, Acut; overwrite=overwrite)
+            DepolLib.write_FITS(outpath, Acut; overwrite=overwrite)
         end
     end
 
@@ -146,20 +146,20 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
     titles = String[]
     for (seg, (kmin, kmax)) in enumerate(intervals[1:min(3, length(intervals))])
         segdir = joinpath(cut_out, @sprintf("seg_%02d_k%04d_%04d", seg, kmin, kmax))
-        f = joinpath(segdir, string(normalize_task_name("segmentation_pipeline_job"), "_", sim, "_LOS", los, "_seg", lpad(seg, 2, '0'), "_Pmax.fits"))
+        f = joinpath(segdir, string(DepolLib.normalize_task_name("segmentation_pipeline_job"), "_", sim, "_LOS", los, "_seg", lpad(seg, 2, '0'), "_Pmax.fits"))
         if isfile(f)
-            push!(pmax_maps, read_fits_f32(f))
+            push!(pmax_maps, DepolLib.read_fits_f32(f))
             push!(titles, @sprintf("segment %d", seg))
         end
     end
 
-    full_pmax_file = withfaraday_path(sim_root, sim, los, "Pmax.fits")
+    full_pmax_file = DepolLib.withfaraday_path(sim_root, sim, los, "Pmax.fits")
     if isfile(full_pmax_file)
-        push!(pmax_maps, read_fits_f32(full_pmax_file))
+        push!(pmax_maps, DepolLib.read_fits_f32(full_pmax_file))
         push!(titles, "full")
     end
 
-    fig_out = standard_output_path(cfg, "segmentation_pipeline_job", "pmax_panels", "pdf"; simu=sim, los=los)
+    fig_out = DepolLib.standard_output_path(cfg, "segmentation_pipeline_job", "pmax_panels", "pdf"; simu=sim, los=los)
     if !isempty(pmax_maps)
         with_theme(theme_latexfonts()) do
             n = length(pmax_maps)
@@ -172,8 +172,8 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
                 c = ((i - 1) % cols) + 1
                 axp = Axis(fig[r, c], title=titles[i], xlabel="Distance [pc]", ylabel="Distance [pc]", xgridvisible=false, ygridvisible=false)
                 m = pmax_maps[i]
-                x = axis_pc(size(m, 2); lbox_pc=lbox_pc)
-                y = axis_pc(size(m, 1); lbox_pc=lbox_pc)
+                x = DepolLib.axis_pc(size(m, 2); lbox_pc=lbox_pc)
+                y = DepolLib.axis_pc(size(m, 1); lbox_pc=lbox_pc)
                 hm = heatmap!(axp, x, y, m; colormap=:magma)
                 Colorbar(fig[r, c + cols], hm)
             end
@@ -193,5 +193,5 @@ function run_segmentation_pipeline_job(cfg)::Dict{String,Any}
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_job_entrypoint("segmentation", run_segmentation_pipeline_job)
+    DepolLib.run_job_entrypoint("segmentation", run_segmentation_pipeline_job)
 end
