@@ -471,6 +471,22 @@ function los_axis(los::AbstractString)
 end
 
 """
+    sky_plane_labels(...)
+
+Returns axis labels for the sky plane associated with LOS.
+"""
+function sky_plane_labels(los::AbstractString)
+    los = require_los(los)
+    if los == "x"
+        return "y", "z"
+    elseif los == "y"
+        return "x", "z"
+    else
+        return "x", "y"
+    end
+end
+
+"""
     axis_pc(...)
 
     Builds a linear axis in parsecs.

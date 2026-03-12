@@ -5,22 +5,6 @@ include(joinpath(@__DIR__, "..", "lib", "DepolLib.jl"))
 using .DepolLib
 
 """
-    _sky_plane_labels(...)
-
-Returns axis labels for the sky plane associated with LOS.
-"""
-function _sky_plane_labels(los::AbstractString)
-    los = DepolLib.require_los(los)
-    if los == "x"
-        return "y", "z"
-    elseif los == "y"
-        return "x", "z"
-    else
-        return "x", "y"
-    end
-end
-
-"""
     _safe_colorrange(...)
 
 Returns a valid colorrange even for uniform maps.
@@ -63,7 +47,7 @@ function _plot_dm_em_maps(dm::AbstractMatrix, em::AbstractMatrix, out_plot::Abst
                           cbar_label_size::Int=44, cbar_tick_size::Int=36, cbar_width::Int=60,
                           tick_step_pc::Real=10.0)
     size(dm) == size(em) || error("DM/EM map size mismatch: dm=$(size(dm)) em=$(size(em))")
-    xlab, ylab = _sky_plane_labels(los)
+    xlab, ylab = DepolLib.sky_plane_labels(los)
 
     x = DepolLib.axis_pc(size(dm, 2); lbox_pc=lbox_pc)
     y = DepolLib.axis_pc(size(dm, 1); lbox_pc=lbox_pc)
@@ -131,7 +115,7 @@ function _plot_measure_heatmap(m::AbstractMatrix, out_plot::AbstractString;
                                title_size::Int=44, label_size::Int=36, tick_size::Int=30,
                                cbar_label_size::Int=44, cbar_tick_size::Int=36, cbar_width::Int=60,
                                tick_step_pc::Real=10.0)
-    xlab, ylab = _sky_plane_labels(los)
+    xlab, ylab = DepolLib.sky_plane_labels(los)
     x = DepolLib.axis_pc(size(m, 2); lbox_pc=lbox_pc)
     y = DepolLib.axis_pc(size(m, 1); lbox_pc=lbox_pc)
     ticks_pc = _pc_ticks(lbox_pc; step_pc=tick_step_pc)

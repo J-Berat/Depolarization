@@ -7,22 +7,6 @@ include(joinpath(@__DIR__, "..", "lib", "DepolLib.jl"))
 using .DepolLib
 
 """
-    _sky_plane_labels(...)
-
-Returns axis labels for the sky plane associated with LOS.
-"""
-function _sky_plane_labels(los::AbstractString)
-    los = require_los(los)
-    if los == "x"
-        return "y", "z"
-    elseif los == "y"
-        return "x", "z"
-    else
-        return "x", "y"
-    end
-end
-
-"""
     _bparallel_from_components(...)
 
 Selects LOS magnetic component from `(Bx, By, Bz)`.
@@ -330,7 +314,7 @@ function run_canal_metrics_job(cfg)::Dict{String,Any}
     vNr = vec(Float64.(Nrev))
     vcan = vec(canal)
 
-    xlab, ylab = _sky_plane_labels(los)
+    xlab, ylab = DepolLib.sky_plane_labels(los)
     xticks = ticks_pc(size(Cb, 1); lbox_pc=lbox_pc, step_pc=10.0)
     yticks = ticks_pc(size(Cb, 2); lbox_pc=lbox_pc, step_pc=10.0)
 
