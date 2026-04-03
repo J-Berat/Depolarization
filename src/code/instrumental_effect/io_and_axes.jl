@@ -23,8 +23,8 @@ end
 function spectral_axes(cfg::InstrumentalConfig, Δx::Real, Δy::Real)
     isfinite(Δx) && Δx > 0 || error("Δx must be positive finite, got $Δx")
     isfinite(Δy) && Δy > 0 || error("Δy must be positive finite, got $Δy")
-    kx = (2π) .* fftshift(fftfreq(cfg.n, Δx))
-    ky = (2π) .* fftshift(fftfreq(cfg.m, Δy))
+    kx = fftshift(fftfreq(cfg.n, Δx))
+    ky = fftshift(fftfreq(cfg.m, Δy))
     x_pc = (0:cfg.n-1) .* Δx
     y_pc = (0:cfg.m-1) .* Δy
     return (; kx, ky, x_pc, y_pc)
@@ -182,7 +182,7 @@ end
 
     Converts filter scale label to parsec units.
 """
-Llabel_pc(Llarge) = round(50 / 256 * Llarge)
+Llabel_pc(Llarge) = round(Int, 50 / 256 * Llarge)
 
 const C_m = 299_792_458.0
 

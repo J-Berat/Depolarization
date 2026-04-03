@@ -55,6 +55,7 @@ Task keys under `tasks.instrumental_effect`:
 - `run_phi_q_u_p` (bool)
 - `run_lic` (bool, currently kept disabled by default behavior)
 - `run_channel_b_alignment` (bool)
+- `run_canal_morphology` (bool)
 - `channel_alignment_pdf_plain` (bool, `true` saves a clean PDF without slider UI)
 
 ## Output Layout
@@ -83,6 +84,10 @@ Global outputs in base directory:
 - `figures/q_phi.pdf`, `u_phi.pdf`, `p_phi.pdf` (if `run_phi_q_u_p=true`)
 - `integrity_report.txt` (always written before heavy compute starts)
 - `channel_alignment_summary.csv` and `figures/channel_alignment_delta_theta_hist.pdf` (if `run_channel_b_alignment=true`)
+- `canal_morphology_branches.csv`, `canal_morphology_scaling_summary.csv`, and
+  `figures/canal_width_distribution.pdf`, `figures/canal_length_distribution.pdf`,
+  `figures/canal_curvature_distribution.pdf`, `figures/canal_length_width_relation.pdf`
+  (if `run_canal_morphology=true`)
 
 ## Integrity Report
 

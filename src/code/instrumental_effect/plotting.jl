@@ -4,6 +4,9 @@
     Formats colorbar ticks as LaTeX strings.
 """
 cb_latex_ticks(vs) = [LaTeXString("\\mathrm{" * Printf.format(Printf.Format("%.2g"), v) * "}") for v in vs]
+const UNIFORM_FIG_TICKLABEL_SIZE = 34
+const UNIFORM_FIG_COLORBAR_LABEL_SIZE = 34
+const UNIFORM_FIG_COLORBAR_TICKLABEL_SIZE = 34
 """
     pow10_label_from_val(...)
 
@@ -169,7 +172,7 @@ end
     Adds vertical lines for filter scales.
 """
 function add_filter_verticals_kx!(ax; Llist_pc::AbstractVector, linestyle=:dash)
-    ks = (2π) ./ Float64.(Llist_pc)
+    ks = 1.0 ./ Float64.(Llist_pc)
     vlines!(ax, ks; linestyle=linestyle, color=:black)
     return nothing
 end
@@ -181,8 +184,9 @@ end
 """
 function add_peak_vline!(ax, k::AbstractVector, y::AbstractVector;
                          kmin::Real=0.0, kmax::Real=Inf,
-                         color=:black, linestyle=:dot, linewidth=4.5)
-    kp = kpeak_in_window(k, y; kmin=kmin, kmax=kmax)
+                         color=:black, linestyle=:dot, linewidth=4.5,
+                         smooth_radius::Int=2)
+    kp = kpeak_in_window(k, y; kmin=kmin, kmax=kmax, smooth_radius=smooth_radius)
     if isfinite(kp)
         vlines!(ax, [kp]; color=color, linestyle=linestyle, linewidth=linewidth)
     end
@@ -222,8 +226,8 @@ function set_theme_heatmaps!()
             titlesize=40,
             xlabelsize=56,
             ylabelsize=56,
-            xticklabelsize=46,
-            yticklabelsize=46,
+            xticklabelsize=UNIFORM_FIG_TICKLABEL_SIZE,
+            yticklabelsize=UNIFORM_FIG_TICKLABEL_SIZE,
             spinewidth=2,
             xgridvisible=false,
             ygridvisible=false,
@@ -231,8 +235,8 @@ function set_theme_heatmaps!()
             yminorticksvisible=false,
         ),
         Colorbar=(
-            labelsize=68,
-            ticklabelsize=44,
+            labelsize=UNIFORM_FIG_COLORBAR_LABEL_SIZE,
+            ticklabelsize=UNIFORM_FIG_COLORBAR_TICKLABEL_SIZE,
             width=34,
             tickformat=cb_latex_ticks,
         ),
@@ -251,8 +255,8 @@ function set_theme_spectra!()
             titlesize=40,
             xlabelsize=56,
             ylabelsize=56,
-            xticklabelsize=46,
-            yticklabelsize=46,
+            xticklabelsize=UNIFORM_FIG_TICKLABEL_SIZE,
+            yticklabelsize=UNIFORM_FIG_TICKLABEL_SIZE,
             spinewidth=2,
             xgridvisible=false,
             ygridvisible=false,
@@ -269,10 +273,10 @@ function set_theme_spectra!()
             xminortickwidth=2,
             yminortickwidth=2,
         ),
-        Legend=(labelsize=44,),
+        Legend=(labelsize=34,),
         Colorbar=(
-            labelsize=62,
-            ticklabelsize=44,
+            labelsize=UNIFORM_FIG_COLORBAR_LABEL_SIZE,
+            ticklabelsize=UNIFORM_FIG_COLORBAR_TICKLABEL_SIZE,
             width=34,
             tickformat=cb_latex_ticks,
         ),
@@ -284,6 +288,26 @@ end
 
     Plots multiple spectra with legend and optional peak/vertical annotations.
 """
+function _smooth_positive_series(y::AbstractVector; radius::Int=2)
+    n = length(y)
+    out = Vector{Float64}(undef, n)
+    @inbounds for i in 1:n
+        acc = 0.0
+        w = 0
+        i1 = max(1, i - radius)
+        i2 = min(n, i + radius)
+        for j in i1:i2
+            yj = y[j]
+            if isfinite(yj) && yj > 0
+                acc += log(Float64(yj))
+                w += 1
+            end
+        end
+        out[i] = w > 0 ? exp(acc / w) : NaN
+    end
+    return out
+end
+
 function plot_multi_spectrum!(ax::Axis, series;
                               add_verticals::Bool=false,
                               Llist_pc::AbstractVector=Float64[],
@@ -309,7 +333,16 @@ function plot_multi_spectrum!(ax::Axis, series;
     end
 
     for s in series
-        li = lines!(ax, s.kx[s.ok], s.Pk[s.ok], color=s.color, linewidth=3)
+        Pplot = _smooth_positive_series(s.Pk; radius=2)
+        if hasproperty(s, :Pstd)
+            Pstd_plot = _smooth_positive_series(max.(s.Pstd, eps(Float64)); radius=2)
+            ylo = max.(Pplot .- Pstd_plot, 0.25 .* Pplot, eps(Float64))
+            yhi = Pplot .+ Pstd_plot
+            okband = s.ok .& isfinite.(Pplot) .& isfinite.(ylo) .& isfinite.(yhi) .& (Pplot .> 0) .& (ylo .> 0) .& (yhi .> 0)
+            band!(ax, s.kx[okband], ylo[okband], yhi[okband]; color=(s.color, 0.10))
+        end
+        okline = s.ok .& isfinite.(Pplot) .& (Pplot .> 0)
+        li = lines!(ax, s.kx[okline], Pplot[okline], color=s.color, linewidth=3)
         push!(handles, li)
         push!(labels, s.label)
 

@@ -23,7 +23,7 @@ function _with_rm_progress_disabled(f::Function)
     end
 end
 
-function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=false)
+function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=false, n::Int=4, m::Int=4)
     q_path = joinpath(td, "Qnu.fits")
     u_path = joinpath(td, "Unu.fits")
     pmax_path = joinpath(td, "Pmax.fits")
@@ -34,20 +34,20 @@ function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=fa
     bz_path = joinpath(td, "Bz.fits")
     dens_path = joinpath(td, "density.fits")
 
-    q_shape = bad_layout ? (4, 4, 3) : (4, 4, 4)
+    q_shape = bad_layout ? (n, m, 3) : (n, m, 4)
     _write_basic_fits(q_path, randn(Float32, q_shape...))
     _write_basic_fits(u_path, randn(Float32, q_shape...))
-    pmax = rand(Float32, 4, 4)
+    pmax = rand(Float32, n, m)
     if pmax_nan
         pmax[1, 1] = NaN32
     end
     _write_basic_fits(pmax_path, pmax)
-    _write_basic_fits(qphi_path, randn(Float32, 4, 4, 3))
-    _write_basic_fits(uphi_path, randn(Float32, 4, 4, 3))
-    _write_basic_fits(bx_path, randn(Float32, 4, 4, 4))
-    _write_basic_fits(by_path, randn(Float32, 4, 4, 4))
-    _write_basic_fits(bz_path, randn(Float32, 4, 4, 4))
-    _write_basic_fits(dens_path, rand(Float32, 4, 4, 4))
+    _write_basic_fits(qphi_path, randn(Float32, n, m, 3))
+    _write_basic_fits(uphi_path, randn(Float32, n, m, 3))
+    _write_basic_fits(bx_path, randn(Float32, n, n, m))
+    _write_basic_fits(by_path, randn(Float32, n, n, m))
+    _write_basic_fits(bz_path, randn(Float32, n, n, m))
+    _write_basic_fits(dens_path, rand(Float32, n, n, m))
 
     return InstrumentalConfig(
         Q_in=q_path,
@@ -61,11 +61,11 @@ function _make_minimal_cfg(td::String; bad_layout::Bool=false, pmax_nan::Bool=fa
         Bz_in=bz_path,
         dens_in=dens_path,
         los="y",
-        n=4,
-        m=4,
-        Lbox_pc=4.0,
+        n=n,
+        m=m,
+        Lbox_pc=Float64(max(n, m)),
         Lcut_small=1.0,
-        Llarge_list=[4.0],
+        Llarge_list=[Float64(max(n, m))],
         νmin_MHz=100.0,
         νmax_MHz=103.0,
         Δν_MHz=1.0,
@@ -198,6 +198,7 @@ end
                     run_phi_q_u_p=false,
                     run_lic=false,
                     run_channel_b_alignment=true,
+                    run_canal_morphology=false,
                 )
 
                 result = _with_rm_progress_disabled() do
@@ -213,6 +214,42 @@ end
                 @test occursin("reference", csv)
                 @test occursin("B_perp", csv)
                 @test !occursin("grad_phi", csv)
+            end
+        end
+
+        @testset "canal morphology section enabled writes outputs" begin
+            mktempdir() do td
+                cfg = _make_minimal_cfg(td; n=21, m=21)
+                pmap = ones(Float32, 21, 21)
+                pmap[:, 11] .= 0.0f0
+                write_FITS(cfg.Pmax_nofilter_path, pmap)
+
+                steps = Symbol[]
+                flags = RunFlags(
+                    run_pmax_maps=false,
+                    run_psd=false,
+                    run_q_u_p_q2=false,
+                    run_phi_q_u_p=false,
+                    run_lic=false,
+                    run_channel_b_alignment=false,
+                    run_canal_morphology=true,
+                )
+
+                result = _with_rm_progress_disabled() do
+                    run_pipeline(cfg; flags=flags, on_step=step -> push!(steps, step))
+                end
+
+                @test result isa InstrumentalEffect.FilterPassResult
+                @test steps == [:filter_pass, :run_canal_morphology]
+                @test isfile(joinpath(cfg.base_out, "canal_morphology_branches.csv"))
+                @test isfile(joinpath(cfg.base_out, "canal_morphology_scaling_summary.csv"))
+                @test isfile(joinpath(cfg.base_out, "figures", "canal_width_distribution.pdf"))
+                @test isfile(joinpath(cfg.base_out, "figures", "canal_length_distribution.pdf"))
+                @test isfile(joinpath(cfg.base_out, "figures", "canal_length_width_relation.pdf"))
+
+                csv = read(joinpath(cfg.base_out, "canal_morphology_branches.csv"), String)
+                @test occursin("width_fwhm_median_pc", csv)
+                @test occursin("curvature_median_pc_inv", csv)
             end
         end
     end

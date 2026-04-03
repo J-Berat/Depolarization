@@ -5,9 +5,8 @@
 """
 function psd2d(img::AbstractMatrix)
     A = float.(img)
-    A .-= mean(A)
-    F = fft(A)
-    P = abs2.(F) ./ (length(A)^2)
+    F = fft(A) ./ sqrt(float(length(A)))
+    P = abs2.(F)
     return fftshift(P)
 end
 
@@ -88,7 +87,7 @@ end
 
     1D PSD along `kx`, averaged over `y`.
 """
-function psd1d_x_mean_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mean::Bool=true)
+function psd1d_x_mean_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mean::Bool=false)
     n, _ = size(img)
     @assert length(kx) == n
 
@@ -97,8 +96,7 @@ function psd1d_x_mean_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mea
         A .-= mean(A)
     end
 
-    Fx = fft(A, 1)
-    invn2 = inv(float(n)^2)
+    Fx = fft(A, 1) ./ sqrt(float(n))
     _, m = size(Fx)
     Pkx = Vector{Float64}(undef, n)
     @inbounds for i in 1:n
@@ -106,9 +104,63 @@ function psd1d_x_mean_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mea
         for j in 1:m
             acc += abs2(Fx[i, j])
         end
-        Pkx[i] = (acc / m) * invn2
+        Pkx[i] = acc / m
     end
     return kx, fftshift(Pkx)
+end
+
+"""
+    psd1d_x_stats_over_y(...)
+
+1D PSD along `kx`, with mean and standard deviation across the transverse cuts.
+"""
+function psd1d_x_stats_over_y(img::AbstractMatrix, kx::AbstractVector; remove_mean::Bool=false)
+    n, m = size(img)
+    @assert length(kx) == n
+
+    A = float.(img)
+    if remove_mean
+        A .-= mean(A)
+    end
+
+    Fx = fft(A, 1) ./ sqrt(float(n))
+    Prow = abs2.(Fx)
+    Prow = fftshift(Prow, 1)
+
+    Pmean = Vector{Float64}(undef, n)
+    Pstd = Vector{Float64}(undef, n)
+    @inbounds for i in 1:n
+        vals = view(Prow, i, :)
+        μ = mean(vals)
+        Pmean[i] = μ
+        Pstd[i] = std(vals; corrected=false)
+    end
+    return kx, Pmean, Pstd
+end
+
+"""
+    _smooth_for_peak(...)
+
+Light smoothing used only for peak detection.
+"""
+function _smooth_for_peak(y::AbstractVector; radius::Int=2)
+    n = length(y)
+    out = Vector{Float64}(undef, n)
+    @inbounds for i in 1:n
+        acc = 0.0
+        w = 0
+        i1 = max(1, i - radius)
+        i2 = min(n, i + radius)
+        for j in i1:i2
+            yj = y[j]
+            if isfinite(yj)
+                acc += Float64(yj)
+                w += 1
+            end
+        end
+        out[i] = w > 0 ? acc / w : NaN
+    end
+    return out
 end
 
 """
@@ -116,12 +168,13 @@ end
 
     Finds dominant spectral peak in a `k` window.
 """
-function kpeak_in_window(k::AbstractVector, y::AbstractVector; kmin::Real=0.0, kmax::Real=Inf)
+function kpeak_in_window(k::AbstractVector, y::AbstractVector; kmin::Real=0.0, kmax::Real=Inf, smooth_radius::Int=2)
+    ys = smooth_radius > 0 ? _smooth_for_peak(y; radius=smooth_radius) : Float64.(y)
     best_k = NaN
     best_y = -Inf
-    @inbounds for i in eachindex(k, y)
+    @inbounds for i in eachindex(k, ys)
         ki = k[i]
-        yi = y[i]
+        yi = ys[i]
         if isfinite(ki) && isfinite(yi) && ki > 0 && yi > 0 && ki >= kmin && ki <= kmax
             if yi > best_y
                 best_y = yi

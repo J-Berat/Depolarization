@@ -3,9 +3,21 @@
 
 # Local analysis artifacts
 outputs/
+tmp/
 .Rhistory
 
 # Local Julia depot/cache if created in-repo
 .julia/
 compiled/
 *.ji
+
+# LaTeX build artifacts kept local to the paper workspace
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+paper.log
+paper.pdf
