@@ -88,6 +88,7 @@ Related sections:
   - `run_phi_q_u_p`
   - `run_lic`
   - `run_channel_b_alignment`
+  - `run_canal_morphology`
 - channel alignment rendering mode:
   - `channel_alignment_pdf_plain`
 - filter scales:

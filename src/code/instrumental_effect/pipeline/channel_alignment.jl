@@ -14,74 +14,20 @@ const _ALIGNMENT_DELTA_ENTRY = NamedTuple{
     Tuple{String, Float64, String, Vector{Float64}},
 }
 
-"""
-    _finite_quantile(...)
-
-Returns a robust quantile over finite values only.
-"""
-function _finite_quantile(A, q::Real)
-    0.0 <= q <= 1.0 || error("q must be in [0,1], got $q")
-    vals = vec(Float64.(A))
-    vals = vals[isfinite.(vals)]
-    isempty(vals) && return NaN
-    return quantile(vals, q)
-end
-
-@inline _wrap_orientation_pi(θ::Real) = mod(float(θ), π)
-
 @inline function _line_orientation_delta_deg(θa::Real, θb::Real)
     Δ = mod((float(θa) - float(θb)) + (π / 2), π) - (π / 2)
     return rad2deg(Δ)
 end
 
 """
-    _gradients_central(...)
-
-Central (interior) + one-sided (boundary) finite differences.
-"""
-function _gradients_central(A::AbstractMatrix, Δx::Real, Δy::Real)
-    n, m = size(A)
-    n >= 2 || error("Need n>=2 to compute gradients, got n=$n")
-    m >= 2 || error("Need m>=2 to compute gradients, got m=$m")
-    isfinite(Δx) && Δx > 0 || error("Δx must be positive finite, got $Δx")
-    isfinite(Δy) && Δy > 0 || error("Δy must be positive finite, got $Δy")
-
-    gx = Matrix{Float64}(undef, n, m)
-    gy = Matrix{Float64}(undef, n, m)
-
-    invdx = inv(float(Δx))
-    invdy = inv(float(Δy))
-    inv2dx = inv(2.0 * float(Δx))
-    inv2dy = inv(2.0 * float(Δy))
-
-    @inbounds for j in 1:m
-        gx[1, j] = (A[2, j] - A[1, j]) * invdx
-        for i in 2:(n - 1)
-            gx[i, j] = (A[i + 1, j] - A[i - 1, j]) * inv2dx
-        end
-        gx[n, j] = (A[n, j] - A[n - 1, j]) * invdx
-    end
-
-    @inbounds for i in 1:n
-        gy[i, 1] = (A[i, 2] - A[i, 1]) * invdy
-        for j in 2:(m - 1)
-            gy[i, j] = (A[i, j + 1] - A[i, j - 1]) * inv2dy
-        end
-        gy[i, m] = (A[i, m] - A[i, m - 1]) * invdy
-    end
-
-    return gx, gy
-end
-
-"""
     _hessian_components(...)
 
-Builds Hessian components from finite differences.
+Builds Hessian components from Gaussian-derivative gradients.
 """
 function _hessian_components(A::AbstractMatrix, Δx::Real, Δy::Real)
-    gx, gy = _gradients_central(A, Δx, Δy)
-    fxx, fxy1 = _gradients_central(gx, Δx, Δy)
-    fxy2, fyy = _gradients_central(gy, Δx, Δy)
+    gx, gy = _gradients_gaussian(A, Δx, Δy)
+    fxx, fxy1 = _gradients_gaussian(gx, Δx, Δy)
+    fxy2, fyy = _gradients_gaussian(gy, Δx, Δy)
     fxy = 0.5 .* (fxy1 .+ fxy2)
     return fxx, fxy, fyy, gx, gy
 end
@@ -108,49 +54,75 @@ end
 """
     _orientation_map_bperp_from_b1_b2(...)
 
-Converts `(B1,B2)` to line orientation using the requested form `atan(B1, B2)`.
+Converts `(B1,B2)` to the projected-field line orientation in the same
+coordinate convention as the displayed maps. For `LOS = y`, the plotted
+horizontal axis is `z` and the plotted vertical axis is `x`, so the line
+angle must be evaluated from `(B2,B1)`.
 """
 function _orientation_map_bperp_from_b1_b2(B1::AbstractMatrix, B2::AbstractMatrix)
-    size(B1) == size(B2) || error("Component size mismatch: B1=$(size(B1)) B2=$(size(B2))")
-    n, m = size(B1)
-    θ = fill(NaN, n, m)
-    @inbounds for j in 1:m, i in 1:n
-        b1 = B1[i, j]
-        b2 = B2[i, j]
-        if isfinite(b1) && isfinite(b2) && (b1 != 0 || b2 != 0)
-            θ[i, j] = _wrap_orientation_pi(atan(b1, b2))
-        end
-    end
-    return θ
+    return _orientation_map_from_components(B2, B1)
 end
 
 """
     _canal_orientation_map(...)
 
-Estimates canal tangent orientation on low-intensity canals (`P <= 1st decile`)
-using only first-order gradients (no Hessian).
+Estimates canal orientation from the smoothed local-deficit map alone. We use
+the local structure tensor of `D_s` to define the normal and tangent
+directions, and we keep only pixels that are maxima of `D_s` across the local
+normal. The tensor is built from Gaussian-derivative gradients and from the
+same isotropic 9-pixel smoothing of the gradient products used in the paper.
 """
 function _canal_orientation_map(Pmap::AbstractMatrix, Δx::Real, Δy::Real)
-    P = Float64.(Pmap)
-    base_valid = isfinite.(P)
-    p10 = _finite_quantile(P, 0.10)
-    mask = base_valid .& (P .<= p10)
-    count(mask) == 0 && (mask .= base_valid)
+    score_raw = _canal_score_map(Pmap)
+    score = _box_mean(score_raw, _CANAL_RIDGE_SMOOTH_RADIUS_PIX)
+    thr = _finite_quantile(score, _CANAL_SCORE_QUANTILE)
+    gx, gz = _gradients_gaussian(score, Δx, Δy)
 
-    Px, Py = _gradients_central(P, Δx, Δy)
-    θcanal = fill(NaN, size(P))
-    @inbounds for j in axes(P, 2), i in axes(P, 1)
-        if mask[i, j]
-            gx = Px[i, j]
-            gy = Py[i, j]
-            if isfinite(gx) && isfinite(gy) && (gx != 0 || gy != 0)
-                # Canal direction is tangent to local iso-intensity contour.
-                θcanal[i, j] = _wrap_orientation_pi(atan(gy, gx) + (π / 2))
+    Jxx = _box_mean(gx .^ 2, _CANAL_TENSOR_SMOOTH_RADIUS_PIX)
+    Jxz = _box_mean(gx .* gz, _CANAL_TENSOR_SMOOTH_RADIUS_PIX)
+    Jzz = _box_mean(gz .^ 2, _CANAL_TENSOR_SMOOTH_RADIUS_PIX)
+
+    θcanal = fill(NaN, size(score))
+    mask = falses(size(score))
+
+    @inbounds for j in axes(score, 2), i in axes(score, 1)
+        Dij = score[i, j]
+        isfinite(Dij) || continue
+        Dij >= thr || continue
+
+        λpar, λperp, tvecx, tvecy, nvecx, nvecy = _symmetric_2x2_eigensystem(
+            Jxx[i, j], Jxz[i, j], Jzz[i, j]
+        )
+        λperp > 0 || continue
+        anis = λperp / max(λpar, 1e-6)
+        anis >= _CANAL_RIDGE_ANIS_MIN || continue
+
+        abs(tvecx) + abs(tvecy) > 1e-12 || continue
+        abs(nvecx) + abs(nvecy) > 1e-12 || continue
+
+        sp = _sample_bilinear(score, i + nvecx, j + nvecy)
+        sm = _sample_bilinear(score, i - nvecx, j - nvecy)
+        isfinite(sp) && isfinite(sm) || continue
+        (Dij >= sp && Dij >= sm) || continue
+
+        θcanal[i, j] = _wrap_orientation_pi(atan(tvecy, tvecx))
+        mask[i, j] = true
+    end
+
+    if count(mask) == 0
+        fallback_mask = isfinite.(score) .& (score .>= thr)
+        @inbounds for j in axes(score, 2), i in axes(score, 1)
+            fallback_mask[i, j] || continue
+            tx = -gz[i, j]
+            ty = gx[i, j]
+            if isfinite(tx) && isfinite(ty) && (tx != 0 || ty != 0)
+                θcanal[i, j] = _wrap_orientation_pi(atan(ty, tx))
+                mask[i, j] = true
             end
         end
     end
 
-    return θcanal, mask, Px, Py
+    return θcanal, mask, score, nothing
 end
 
 """
@@ -202,131 +174,6 @@ function _alignment_stats_from_deltas(deltas::AbstractVector{<:Real}; tol_deg::R
         frac_perp_tol=mean(perp .<= tol_deg),
         median_perp_offset_deg=median(perp),
     )
-end
-
-"""
-    _alignment_stats(...)
-
-Computes alignment/perpendicularity statistics on selected pixels.
-"""
-function _alignment_stats(θcanal::AbstractMatrix, θref::AbstractMatrix, mask::AbstractMatrix; tol_deg::Real=_ALIGNMENT_ANGLE_TOL_DEG)
-    deltas = _alignment_deltas_deg(θcanal, θref, mask)
-    return _alignment_stats_from_deltas(deltas; tol_deg=tol_deg)
-end
-
-"""
-    _project_cube_mean(...)
-
-LOS-average projection with map-shape reconciliation.
-"""
-function _project_cube_mean(cube, los::String, target_size::Tuple{Int,Int})
-    ndims(cube) == 3 || error("Expected 3D cube for LOS projection, got ndims=$(ndims(cube)) size=$(size(cube))")
-    los in ("x", "y", "z") || error("LOS must be x/y/z, got $los")
-
-    dim = los == "x" ? 1 : (los == "y" ? 2 : 3)
-    proj = dropdims(mean(Float64.(cube); dims=dim), dims=dim)
-
-    if size(proj) == target_size
-        return Matrix{Float64}(proj)
-    end
-
-    proj_t = permutedims(proj, (2, 1))
-    if size(proj_t) == target_size
-        return Matrix{Float64}(proj_t)
-    end
-
-    error("Projected map has size $(size(proj)) (or transposed $(size(proj_t))), expected $target_size")
-end
-
-"""
-    _project_hypot_mean(...)
-
-LOS-average projection of `hypot(B1, B2)` without allocating a full intermediate cube.
-"""
-function _project_hypot_mean(B1_cube, B2_cube, los::String, target_size::Tuple{Int,Int})
-    size(B1_cube) == size(B2_cube) || error("B1/B2 size mismatch: B1=$(size(B1_cube)) B2=$(size(B2_cube))")
-    ndims(B1_cube) == 3 || error("B1_cube must be 3D, got ndims=$(ndims(B1_cube))")
-
-    nx, ny, nz = size(B1_cube)
-    if los == "x"
-        out = Matrix{Float64}(undef, ny, nz)
-        @inbounds for j in 1:nz, i in 1:ny
-            acc = 0.0
-            for k in 1:nx
-                acc += hypot(B1_cube[k, i, j], B2_cube[k, i, j])
-            end
-            out[i, j] = acc / nx
-        end
-    elseif los == "y"
-        out = Matrix{Float64}(undef, nx, nz)
-        @inbounds for j in 1:nz, i in 1:nx
-            acc = 0.0
-            for k in 1:ny
-                acc += hypot(B1_cube[i, k, j], B2_cube[i, k, j])
-            end
-            out[i, j] = acc / ny
-        end
-    elseif los == "z"
-        out = Matrix{Float64}(undef, nx, ny)
-        @inbounds for j in 1:ny, i in 1:nx
-            acc = 0.0
-            for k in 1:nz
-                acc += hypot(B1_cube[i, j, k], B2_cube[i, j, k])
-            end
-            out[i, j] = acc / nz
-        end
-    else
-        error("LOS must be x/y/z, got $los")
-    end
-
-    if size(out) == target_size
-        return out
-    end
-
-    out_t = permutedims(out, (2, 1))
-    if size(out_t) == target_size
-        return out_t
-    end
-    error("Projected hypot map has size $(size(out)) (or transposed $(size(out_t))), expected $target_size")
-end
-
-"""
-    _project_bperp_maps(...)
-
-Projects magnetic field onto the sky plane according to LOS.
-"""
-function _project_bperp_maps(cfg::InstrumentalConfig)
-    Bx = read_FITS(cfg.Bx_in)
-    By = read_FITS(cfg.By_in)
-    Bz = read_FITS(cfg.Bz_in)
-
-    ndims(Bx) == 3 || error("Bx must be 3D, got size=$(size(Bx))")
-    ndims(By) == 3 || error("By must be 3D, got size=$(size(By))")
-    ndims(Bz) == 3 || error("Bz must be 3D, got size=$(size(Bz))")
-    size(Bx) == size(By) || error("Bx/By shape mismatch: Bx=$(size(Bx)) By=$(size(By))")
-    size(By) == size(Bz) || error("By/Bz shape mismatch: By=$(size(By)) Bz=$(size(Bz))")
-
-    target = (cfg.n, cfg.m)
-
-    if cfg.los == "x"
-        B1_cube = By
-        B2_cube = Bz
-    elseif cfg.los == "y"
-        B1_cube = Bx
-        B2_cube = Bz
-    else
-        B1_cube = Bx
-        B2_cube = By
-    end
-
-    # Components in the sky plane.
-    b1 = _project_cube_mean(B1_cube, cfg.los, target)
-    b2 = _project_cube_mean(B2_cube, cfg.los, target)
-
-    # Requested definition: B_perp = sqrt(B1^2 + B2^2), then LOS projection.
-    bperp = _project_hypot_mean(B1_cube, B2_cube, cfg.los, target)
-
-    return b1, b2, bperp
 end
 
 """
@@ -450,6 +297,13 @@ function _kde_curve_density(vals::AbstractVector{<:Real};
         end
     end
     y .*= inv_norm
+    if ngrid >= 2
+        dx = x[2] - x[1]
+        area = dx * (0.5 * y[1] + sum(@view y[2:end-1]) + 0.5 * y[end])
+        if area > 0
+            y ./= area
+        end
+    end
     return x, y
 end
 

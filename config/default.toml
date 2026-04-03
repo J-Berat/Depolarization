@@ -2,6 +2,8 @@
 simulations_root = "/Users/jb270005/Desktop/simu_RAMSES"
 desktop_output_root = "./outputs"
 transitions_csv_root = "./data/transitions"
+moose_root = "/Users/jb270005/Desktop/MOOSE"
+emissivity_table = "/Users/jb270005/Desktop/Code/Synchrotron/emissivity.dat"
 
 [simulation]
 name = "d1cf05bx10rms18000nograv1024"
@@ -59,8 +61,13 @@ run_q_u_p_q2 = true
 run_phi_q_u_p = true
 run_lic = false
 run_channel_b_alignment = true
+run_canal_morphology = true
 channel_alignment_pdf_plain = true
-llarge_list = [200.0, 100.0, 50.0, 20.0]
+llarge_list = [154.0, 102.0, 77.0, 51.0]
+phi_min = -10.0
+phi_max = 10.0
+dphi = 0.25
+phi_target = -2.75
 
 [tasks.ne_dm_em]
 enabled = true

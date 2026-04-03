@@ -1,14 +1,26 @@
 # Depolarization
 
-Julia workflows for depolarization and synchrotron/Faraday analysis on RAMSES simulation data.
+Julia workflows for depolarization, synchrotron, and Faraday-analysis products derived from RAMSES simulation cubes.
 
-## Quick Start (CLI)
+This repository is organized around reproducible batch jobs: each job reads FITS inputs from a simulation tree, applies one scientific workflow, and writes structured outputs under a task-specific directory.
+
+## Who This Repo Is For
+
+This repository is easiest to approach if you are:
+
+- running the existing analysis pipeline on local RAMSES simulation data
+- inspecting how a given figure or product is generated
+- extending one of the existing Julia jobs
+
+If you do not already have the simulation FITS files referenced by `config/default.toml`, you can still read the code and docs, but you will not be able to execute the full workflows end to end.
+
+## Start Here
 
 ```bash
-# 1) Install + precompile local environment
+# 1) Install dependencies and precompile once
 julia --startup-file=no --project=. scripts/precompile.jl
 
-# 2) Run one job with runtime overrides
+# 2) Run one job
 julia --startup-file=no --project=. src/code/jobs/run_instrumental_effect_job.jl \
   --config config/default.toml \
   --set paths.simulations_root=/path/to/simu_RAMSES \
@@ -16,165 +28,69 @@ julia --startup-file=no --project=. src/code/jobs/run_instrumental_effect_job.jl
   --set simulation.name=d1cf05bx10rms18000nograv1024 \
   --set simulation.los=y
 
-# 3) Check generated outputs
+# 3) Inspect outputs
 ls -R ./outputs/instrumental/d1cf05bx10rms18000nograv1024/LOSy
 ```
 
-All jobs support:
+All executable jobs follow the same CLI contract:
 
 ```bash
-julia --startup-file=no --project=. <job>.jl --config config/default.toml --set key=value --set other.key=value
+julia --startup-file=no --project=. <job>.jl --config path/to/file.toml --set key=value
 ```
 
-Or run with forced precompilation every time:
+Only two runtime flags are accepted:
 
-```bash
-./scripts/run_with_precompile.sh reversal_transition --config config/default.toml
-```
+- `--config <path>`
+- repeatable `--set key=value`
 
-Accepted CLI args are only `--config` and repeatable `--set key=value`.
+## Repository Map
 
-## Documentation
+- `src/code/jobs/`: executable job entrypoints.
+- `src/code/lib/DepolLib.jl`: shared configuration, path, validation, and REPL helpers.
+- `src/code/instrumental_effect/`: internals for the instrumental-effect pipeline.
+- `config/`: default runtime configuration.
+- `docs/`: user-facing documentation and developer notes.
+- `scripts/`: helper scripts for setup, documentation generation, figure generation, and ad hoc analysis.
+- `test/`: regression and integration-style tests.
+- `outputs/`: generated analysis products for local runs; ignored by Git.
 
-- [docs/README.md](docs/README.md): documentation index and reading map.
-- [docs/getting_started.md](docs/getting_started.md): setup, first run, CLI/REPL workflows.
-- [docs/configuration.md](docs/configuration.md): config keys, overrides, and task sections.
-- [docs/jobs.md](docs/jobs.md): complete per-job inputs/outputs and execution order.
-- [docs/development.md](docs/development.md): architecture, tests, and maintenance workflow.
-- [docs/instrumental_effect.md](docs/instrumental_effect.md): full pipeline contract for `run_instrumental_effect_job.jl` (inputs, flags, outputs, integrity report, logs).
-- [docs/functions.md](docs/functions.md): auto-generated function index across `src/code/`.
+A fuller explanation of what belongs where is available in [docs/repository_layout.md](docs/repository_layout.md).
 
-Regenerate function docs:
+## Main Jobs
 
-```bash
-./scripts/generate_functions_doc.sh
-```
+Recommended execution order for a fresh simulation:
 
-## Use From REPL
-
-Start REPL in project mode:
-
-```bash
-julia --startup-file=no --project=.
-```
-
-Example:
-
-```julia
-julia> cd("/absolute/path/to/Depolarization")
-
-julia> include("src/code/lib/DepolLib.jl")
-julia> include("src/code/jobs/run_instrumental_effect_job.jl")
-julia> using .DepolLib
-
-julia> cfg = build_cfg("instrumental";
-           config_path="config/default.toml",
-           overrides=Dict(
-             "paths.simulations_root" => "/path/to/simu_RAMSES",
-             "paths.desktop_output_root" => "./outputs",
-             "simulation.name" => "d1cf05bx10rms18000nograv1024",
-             "simulation.los" => "y",
-           ));
-
-julia> result = run_instrumental_effect_job(cfg)
-julia> result["output_dir"]
-```
-
-CLI-style config in REPL is also supported:
-
-```julia
-julia> cfg = load_runtime_config("reversal";
-           args=[
-             "--config", "config/default.toml",
-             "--set", "paths.simulations_root=/path/to/simu_RAMSES",
-             "--set", "simulation.name=d1cf05bx10rms18000nograv1024",
-             "--set", "simulation.los=y",
-           ]);
-```
-
-Built-in REPL help (from `DepolLib`):
-
-```julia
-julia> include("src/code/lib/DepolLib.jl")
-julia> using .DepolLib
-
-julia> depol_help()               # full guide (setup + jobs)
-julia> depol_help("jobs")         # all jobs
-julia> depol_help("instrumental") # one specific job
-
-julia> repl_help("reversal")       # alias of depol_help(...)
-julia> DepolLib.help("reversal")   # qualified fallback if needed
-```
-
-## Jobs
-
-- `src/code/jobs/run_ne_dm_em_job.jl`
-- `src/code/jobs/run_mach_suite.jl`
-- `src/code/jobs/run_reversal_transition_job.jl`
-- `src/code/jobs/run_canal_metrics_job.jl`
-- `src/code/jobs/run_segmentation_pipeline_job.jl`
-- `src/code/jobs/run_instrumental_effect_job.jl`
-
-Recommended order (fresh simulation):
-
-1. `run_ne_dm_em_job.jl` (builds `ne.fits`, `DM.fits`, `EM.fits`)
+1. `run_ne_dm_em_job.jl`
 2. `run_mach_suite.jl`
 3. `run_reversal_transition_job.jl`
 4. `run_canal_metrics_job.jl`
 5. `run_segmentation_pipeline_job.jl`
 6. `run_instrumental_effect_job.jl`
 
-CLI cheatsheet (one command per job):
+Job reference:
+
+- [docs/jobs.md](docs/jobs.md): purpose, inputs, outputs, and config section for each job.
+- [docs/instrumental_effect.md](docs/instrumental_effect.md): detailed contract for the instrumental-effect pipeline.
+
+## Documentation Guide
+
+- [docs/README.md](docs/README.md): documentation index with reading paths.
+- [docs/getting_started.md](docs/getting_started.md): setup, first execution, CLI and REPL usage.
+- [docs/configuration.md](docs/configuration.md): configuration keys, overrides, and task sections.
+- [docs/jobs.md](docs/jobs.md): job-by-job inputs, outputs, and execution order.
+- [docs/repository_layout.md](docs/repository_layout.md): structure of the repository and what is generated locally.
+- [docs/development.md](docs/development.md): architecture, tests, and maintenance workflow.
+- [docs/functions.md](docs/functions.md): auto-generated function index for `src/code/`.
+
+Regenerate function docs with:
 
 ```bash
-julia --startup-file=no --project=. src/code/jobs/run_ne_dm_em_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_mach_suite.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_reversal_transition_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_canal_metrics_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_segmentation_pipeline_job.jl --config config/default.toml
-julia --startup-file=no --project=. src/code/jobs/run_instrumental_effect_job.jl --config config/default.toml
+./scripts/generate_functions_doc.sh
 ```
 
-REPL task names for `build_cfg(task, ...)` / `load_runtime_config(task, ...)`:
+## Expected Input Data
 
-- `ne_dm_em`
-- `mach`
-- `reversal`
-- `canal_metrics`
-- `segmentation`
-- `instrumental`
-
-Run all jobs:
-
-```bash
-for job in \
-  src/code/jobs/run_ne_dm_em_job.jl \
-  src/code/jobs/run_mach_suite.jl \
-  src/code/jobs/run_reversal_transition_job.jl \
-  src/code/jobs/run_canal_metrics_job.jl \
-  src/code/jobs/run_segmentation_pipeline_job.jl \
-  src/code/jobs/run_instrumental_effect_job.jl
-do
-  julia --startup-file=no --project=. "$job" --config config/default.toml
-done
-```
-
-## Minimal Config
-
-Main keys in `config/default.toml`:
-
-- `paths.simulations_root`
-- `paths.desktop_output_root` (optional; default is `~/Desktop/depolarization_outputs`)
-- `paths.transitions_csv_root`
-- `simulation.name`
-- `simulation.los` (`x`, `y`, `z`)
-
-Task toggles/params live under `tasks.*` (for example `tasks.canal_metrics`, `tasks.instrumental_effect`, `tasks.ne_dm_em`, `tasks.segmentation_pipeline_job`).
-
-`paths.desktop_output_root` is the preferred key.
-Legacy `paths.outputs_root` is still accepted as a fallback.
-
-## Expected Inputs
+Most workflows expect a simulation tree shaped like:
 
 ```text
 <simulations_root>/
@@ -189,9 +105,9 @@ Legacy `paths.outputs_root` is still accepted as a fallback.
     temperature.fits
     <los>/
       Synchrotron/
-        ne.fits                # generated by run_ne_dm_em_job.jl (or provided)
-        DM.fits                # generated by run_ne_dm_em_job.jl
-        EM.fits                # generated by run_ne_dm_em_job.jl
+        ne.fits
+        DM.fits
+        EM.fits
         WithFaraday/
           Pmax.fits
           Qnu.fits
@@ -201,52 +117,63 @@ Legacy `paths.outputs_root` is still accepted as a fallback.
           imagFDF.fits
 ```
 
-Required by job:
+The exact requirements differ by job; see [docs/jobs.md](docs/jobs.md) for the per-job breakdown.
 
-- `run_ne_dm_em_job.jl`: `density.fits`, `temperature.fits`
-- `run_mach_suite.jl`: root cubes + LOS `WithFaraday/Pmax.fits` for both `tasks.mach_suite.los_y` and `tasks.mach_suite.los_x`
-- `run_reversal_transition_job.jl`: `WithFaraday/Pmax.fits`, `WithFaraday/FDF.fits`, `Synchrotron/ne.fits`, and LOS magnetic cube (`Bx`/`By`/`Bz` by LOS)
-- `run_canal_metrics_job.jl`: `WithFaraday/Pmax.fits`, `Synchrotron/ne.fits`, and root `Bx.fits/By.fits/Bz.fits`
-- `run_segmentation_pipeline_job.jl`: root cubes + transitions CSV under `paths.transitions_csv_root` with columns `kmin,kmax`
-- `run_instrumental_effect_job.jl`: `WithFaraday/Qnu.fits`, `Unu.fits`, `Pmax.fits`, `realFDF.fits`, `imagFDF.fits` + root `Bx/By/Bz/density`
+## Configuration At A Glance
 
-## Outputs
+The main keys in `config/default.toml` are:
 
-Top-level output folder pattern:
+- `paths.simulations_root`
+- `paths.desktop_output_root`
+- `paths.transitions_csv_root`
+- `simulation.name`
+- `simulation.los`
 
-```text
-<desktop_output_root>/<task>/<simulation>/LOS<los>/
+Task-specific switches live under `tasks.*`.
+
+`paths.desktop_output_root` is the preferred output key. The legacy `paths.outputs_root` key is still accepted as a fallback.
+
+## REPL Usage
+
+Start a project REPL:
+
+```bash
+julia --startup-file=no --project=.
 ```
 
-For the instrumental pipeline, each filter also writes:
+Then:
 
-- `HardBandPass_remove_L0_to_1pc_and_<L>to50pc/Qnu_filtered.fits`
-- `HardBandPass_remove_L0_to_1pc_and_<L>to50pc/Unu_filtered.fits`
-- `HardBandPass_remove_L0_to_1pc_and_<L>to50pc/RMSynthesis/Pphi_max.fits`
-- `figures/*.pdf`
-- `channel_alignment_summary.csv` (if `tasks.instrumental_effect.run_channel_b_alignment=true`)
-- `figures/channel_alignment_delta_theta_hist.pdf` (if `tasks.instrumental_effect.run_channel_b_alignment=true`)
-- `tasks.instrumental_effect.channel_alignment_pdf_plain=true` saves this PDF without slider UI (histograms only).
-- `integrity_report.txt`
+```julia
+julia> include("src/code/lib/DepolLib.jl")
+julia> include("src/code/jobs/run_instrumental_effect_job.jl")
+julia> using .DepolLib
 
-For `canal_metrics`, outputs include:
+julia> cfg = build_cfg("instrumental";
+           config_path="config/default.toml",
+           overrides=Dict(
+             "paths.simulations_root" => "/path/to/simu_RAMSES",
+             "paths.desktop_output_root" => "./outputs",
+             "simulation.name" => "d1cf05bx10rms18000nograv1024",
+             "simulation.los" => "y",
+           ));
 
-- `maps_cb_cphi.pdf`
-- `pdfs_2x2.pdf`
-- `cb_ab_matrix.pdf`
+julia> result = run_instrumental_effect_job(cfg)
+```
 
-Task names produced by current jobs:
+Built-in help is available from `DepolLib`:
 
-- `ne_dm_em`
-- `mach`
-- `reversal`
-- `canal_metrics`
-- `segmentation`
-- `instrumental`
+```julia
+julia> depol_help()
+julia> depol_help("jobs")
+julia> depol_help("instrumental")
+```
 
-## Troubleshooting
+## Local Repository Hygiene
 
-- Missing FITS files: verify `paths.simulations_root`, `simulation.name`, `simulation.los`.
-- Invalid LOS: only `x`, `y`, `z`.
-- Transition CSV errors: verify `paths.transitions_csv_root` and CSV columns `kmin,kmax`.
-- CLI parsing errors: use only `--config` and repeatable `--set key=value`.
+This repository contains both source files and locally generated scientific outputs. To keep the tracked tree readable:
+
+- generated outputs belong under `outputs/`
+- scratch files belong under `tmp/`
+- LaTeX build artefacts for the paper stay untracked
+
+That way the repository root remains readable for external users while preserving local experimentation.

@@ -20,6 +20,13 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
     dens_in = simulation_field_path(sim_root, sim, "density")
     llarge_list = Float64.(cfg_get(cfg, ["tasks", "instrumental_effect", "llarge_list"];
                                    default=[200.0, 180.0, 165.0, 150.0, 135.0, 120.0, 105.0, 90.0, 80.0, 70.0, 60.0, 50.0, 40.0, 30.0, 20.0]))
+    phi_min = Float64(cfg_get(cfg, ["tasks", "instrumental_effect", "phi_min"]; default=-10.0))
+    phi_max = Float64(cfg_get(cfg, ["tasks", "instrumental_effect", "phi_max"]; default=10.0))
+    dphi = Float64(cfg_get(cfg, ["tasks", "instrumental_effect", "dphi"]; default=0.1))
+    phi_target = Float64(cfg_get(cfg, ["tasks", "instrumental_effect", "phi_target"]; default=-2.8))
+    phi_array = collect(phi_min:dphi:phi_max)
+    isempty(phi_array) && error("Empty PhiArray built from phi_min=$phi_min phi_max=$phi_max dphi=$dphi")
+    iphi = findmin(abs.(phi_array .- phi_target))[2]
 
     try
         require_existing_files([
@@ -54,6 +61,8 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         dens_in = dens_in,
         los = los,
         Llarge_list = llarge_list,
+        PhiArray = phi_array,
+        iphi = iphi,
         channel_alignment_pdf_plain = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "channel_alignment_pdf_plain"]; default=true)),
     )
 
@@ -64,6 +73,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
         run_phi_q_u_p = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_phi_q_u_p"]; default=true)),
         run_lic = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_lic"]; default=false)),
         run_channel_b_alignment = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_channel_b_alignment"]; default=true)),
+        run_canal_morphology = Bool(cfg_get(cfg, ["tasks", "instrumental_effect", "run_canal_morphology"]; default=true)),
     )
 
     data = run_pipeline(run_cfg; flags=flags)
@@ -82,6 +92,7 @@ function run_instrumental_effect_job(cfg)::Dict{String,Any}
             "run_phi_q_u_p" => flags.run_phi_q_u_p,
             "run_lic" => flags.run_lic,
             "run_channel_b_alignment" => flags.run_channel_b_alignment,
+            "run_canal_morphology" => flags.run_canal_morphology,
         ),
     )
 end

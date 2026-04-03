@@ -35,6 +35,7 @@ Base.@kwdef struct RunFlags
     run_phi_q_u_p::Bool = true
     run_lic::Bool = false
     run_channel_b_alignment::Bool = true
+    run_canal_morphology::Bool = true
 end
 
 # Backward-compatible positional constructor kept for existing call sites/tests.
@@ -46,6 +47,7 @@ RunFlags(run_pmax_maps::Bool, run_psd::Bool, run_q_u_p_q2::Bool, run_phi_q_u_p::
         run_phi_q_u_p=run_phi_q_u_p,
         run_lic=run_lic,
         run_channel_b_alignment=false,
+        run_canal_morphology=false,
     )
 
 """

@@ -27,10 +27,10 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         u_filt = data.Uslice_filt
 
         _plot_component_spectrum(cfg, data.axes.kx, Qslice0, q_filt,
-            LaTeXString("S_{Q}(k_x;\\nu_{50})"); add_verticals=true, save_tag="q_nu50")
+            LaTeXString("S_{Q}(k_{\\parallel};\\nu_{50})"); add_verticals=true, save_tag="q_nu50")
 
         _plot_component_spectrum(cfg, data.axes.kx, Uslice0, u_filt,
-            LaTeXString("S_{U}(k_x;\\nu_{50})"); add_verticals=true, save_tag="u_nu50")
+            LaTeXString("S_{U}(k_{\\parallel};\\nu_{50})"); add_verticals=true, save_tag="u_nu50")
 
         p_no = sqrt.(Qslice0.^2 .+ Uslice0.^2)
         p_filt = Dict{Float64, Matrix{Float64}}()
@@ -40,7 +40,7 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
             p_filt[Llarge] = Float64.(sqrt.(qL.^2 .+ uL.^2))
         end
         _plot_component_spectrum(cfg, data.axes.kx, p_no, p_filt,
-            LaTeXString("S_{P}(k_x;\\nu_{50})");
+            LaTeXString("S_{P}(k_{\\parallel};\\nu_{50})");
             add_verticals=false,
             peak_window=(0.12, Inf),
             inset_title=:Pnu,
@@ -49,7 +49,7 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         q2_no = Qslice0 .^ 2
         q2_filt = Dict{Float64, Matrix{Float64}}(k => Float64.(data.Qslice_filt[k].^2) for k in keys(data.Qslice_filt))
         _plot_component_spectrum(cfg, data.axes.kx, q2_no, q2_filt,
-            LaTeXString("S_{Q^{2}}(k_x;\\nu_{50})"); add_verticals=true, save_tag="q2_nu50")
+            LaTeXString("S_{Q^{2}}(k_{\\parallel};\\nu_{50})"); add_verticals=true, save_tag="q2_nu50")
     end
 
     if flags.run_phi_q_u_p
@@ -70,13 +70,13 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
         Pφf = Dict{Float64, Matrix{Float64}}(k => sqrt.(Qφf[k].^2 .+ Uφf[k].^2) for k in keys(Qφf))
 
         _plot_component_spectrum(cfg, data.axes.kx, Qφ0, Qφf,
-            LaTeXString("S_{Q_{\\phi}}(k_x)"); add_verticals=true, save_tag="q_phi")
+            LaTeXString("S_{Q_{\\phi}}(k_{\\parallel})"); add_verticals=true, save_tag="q_phi")
 
         _plot_component_spectrum(cfg, data.axes.kx, Uφ0, Uφf,
-            LaTeXString("S_{U_{\\phi}}(k_x)"); add_verticals=true, save_tag="u_phi")
+            LaTeXString("S_{U_{\\phi}}(k_{\\parallel})"); add_verticals=true, save_tag="u_phi")
 
         _plot_component_spectrum(cfg, data.axes.kx, Pφ0, Pφf,
-            LaTeXString("S_{P_{\\phi}}(k_x)");
+            LaTeXString("S_{P_{\\phi}}(k_{\\parallel})");
             add_verticals=false,
             peak_window=(0.12, Inf),
             inset_title=:Pphi,
@@ -86,6 +86,11 @@ function run_pipeline(cfg::InstrumentalConfig; flags::RunFlags=RunFlags(), on_st
     if flags.run_channel_b_alignment
         on_step(:run_channel_b_alignment)
         _run_channel_b_alignment(cfg, data)
+    end
+
+    if flags.run_canal_morphology
+        on_step(:run_canal_morphology)
+        _run_canal_morphology(cfg, data)
     end
 
     if flags.run_lic

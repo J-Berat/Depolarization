@@ -1,5 +1,7 @@
 # Getting Started
 
+This guide is for first-time users who want to run an existing workflow with local simulation data.
+
 ## Prerequisites
 
 - Julia (tested in CI with Julia 1.12)
@@ -20,6 +22,8 @@ This command:
 - installs missing dependencies
 - precompiles dependencies and project code
 
+If you are new to the repository structure, read `repository_layout.md` before going deeper into `scripts/` or `src/code/`.
+
 ## First Job Run (CLI)
 
 Example with explicit runtime overrides:
@@ -39,6 +43,13 @@ All jobs use the same CLI contract:
 - repeatable `--set key=value`
 
 Only these two flags are accepted by runtime config parsing.
+
+The most important runtime values to override for a new machine are:
+
+- `paths.simulations_root`
+- `paths.desktop_output_root`
+- `simulation.name`
+- `simulation.los`
 
 ## Precompile + Run Wrapper
 
@@ -103,6 +114,8 @@ do
 done
 ```
 
+For a first external read, it is usually better to run one job first and inspect the resulting output tree before launching the full sequence.
+
 ## Output Root Behavior
 
 Output root selection order:
@@ -116,3 +129,4 @@ Output root selection order:
 - Missing files: verify `paths.simulations_root`, `simulation.name`, and required FITS files.
 - Invalid LOS: only `x`, `y`, `z` are allowed.
 - CLI parsing errors: remove unsupported flags and keep only `--config`/`--set`.
+- Unsure where a result should land: check `docs/jobs.md` for the standard output layout of each job.

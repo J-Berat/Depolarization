@@ -11,4 +11,6 @@ using .InstrumentalEffect
 include(joinpath(@__DIR__, "test_depollib.jl"))
 include(joinpath(@__DIR__, "test_canal_metrics_job.jl"))
 include(joinpath(@__DIR__, "test_instrumental_core.jl"))
+include(joinpath(@__DIR__, "test_instrumental_analysis_helpers.jl"))
 include(joinpath(@__DIR__, "test_filter_pass.jl"))
+include(joinpath(@__DIR__, "test_instrumental_job.jl"))

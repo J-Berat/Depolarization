@@ -1,5 +1,7 @@
 # Development Guide
 
+This guide is maintainer-oriented. If you are trying to understand the repository for the first time, start with `README.md` and `docs/repository_layout.md`.
+
 ## Repository Structure
 
 - `src/code/lib/DepolLib.jl`: shared runtime/config/path helpers and REPL helper text
@@ -10,6 +12,8 @@
 - `scripts/run_with_precompile.sh`: convenience wrapper for precompile+job run
 - `docs/functions.md`: auto-generated function list
 - `test/`: unit/integration-style tests
+
+For an external-reader overview of the full repository, see `docs/repository_layout.md`.
 
 ## Instrumental Pipeline Layout
 
